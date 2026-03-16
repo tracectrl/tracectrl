@@ -1,0 +1,222 @@
+"""Topology edge upsert/read with cumulative state for ReplacingMergeTree."""
+
+import hashlib
+import json
+from datetime import datetime
+from engine.db.client import execute
+
+
+def _get_existing_agent_edge(edge_id: str) -> dict | None:
+    """Fetch current agent edge state using FINAL."""
+    rows = execute(
+        """
+        SELECT edge_id, observation_count, first_seen
+        FROM topology_agent_edges FINAL
+        WHERE edge_id = %(id)s
+        """,
+        {"id": edge_id},
+    )
+    if not rows:
+        return None
+    return {
+        "observation_count": rows[0][1],
+        "first_seen": rows[0][2],
+    }
+
+
+def _get_existing_tool_edge(edge_id: str) -> dict | None:
+    """Fetch current tool edge state using FINAL."""
+    rows = execute(
+        """
+        SELECT edge_id, call_count, call_contexts, error_count, first_seen
+        FROM topology_tool_edges FINAL
+        WHERE edge_id = %(id)s
+        """,
+        {"id": edge_id},
+    )
+    if not rows:
+        return None
+    ctx = rows[0][2]
+    if isinstance(ctx, str):
+        try:
+            ctx = json.loads(ctx)
+        except (json.JSONDecodeError, TypeError):
+            ctx = {"user": 0, "agent": 0, "external": 0, "memory": 0}
+    return {
+        "call_count": rows[0][1],
+        "call_contexts": ctx or {"user": 0, "agent": 0, "external": 0, "memory": 0},
+        "error_count": rows[0][3],
+        "first_seen": rows[0][4],
+    }
+
+
+def update_topology(spans: list[dict]):
+    """Build agent->agent and agent->tool edges from spans."""
+    agent_edges: dict[str, dict] = {}
+    tool_edges: dict[str, dict] = {}
+    now = datetime.utcnow()
+
+    for span in spans:
+        agent_id = span.get("tc_agent_id", "")
+        caller_id = span.get("tc_caller_agent_id", "")
+
+        # Agent->Agent edges
+        if agent_id and caller_id:
+            edge_key = f"{caller_id}:{agent_id}"
+            edge_id = hashlib.md5(edge_key.encode()).hexdigest()[:16]
+            if edge_id not in agent_edges:
+                existing = _get_existing_agent_edge(edge_id)
+                if existing:
+                    agent_edges[edge_id] = {
+                        "edge_id": edge_id,
+                        "caller_agent_id": caller_id,
+                        "callee_agent_id": agent_id,
+                        "channel": "function_call",
+                        "observation_count": existing["observation_count"],
+                        "first_seen": existing["first_seen"],
+                        "last_seen": span["timestamp"],
+                    }
+                else:
+                    agent_edges[edge_id] = {
+                        "edge_id": edge_id,
+                        "caller_agent_id": caller_id,
+                        "callee_agent_id": agent_id,
+                        "channel": "function_call",
+                        "observation_count": 0,
+                        "first_seen": span["timestamp"],
+                        "last_seen": span["timestamp"],
+                    }
+            agent_edges[edge_id]["observation_count"] += 1
+            agent_edges[edge_id]["last_seen"] = span["timestamp"]
+
+        # Agent->Tool edges
+        tool_name = span.get("tool_name", "")
+        if agent_id and tool_name:
+            edge_key = f"{agent_id}:{tool_name}"
+            edge_id = hashlib.md5(edge_key.encode()).hexdigest()[:16]
+            if edge_id not in tool_edges:
+                existing = _get_existing_tool_edge(edge_id)
+                if existing:
+                    tool_edges[edge_id] = {
+                        "edge_id": edge_id,
+                        "agent_id": agent_id,
+                        "tool_name": tool_name,
+                        "tool_category": span.get("tc_tool_category", "internal_api"),
+                        "call_count": existing["call_count"],
+                        "call_contexts": existing["call_contexts"],
+                        "error_count": existing["error_count"],
+                        "first_seen": existing["first_seen"],
+                        "last_seen": span["timestamp"],
+                    }
+                else:
+                    tool_edges[edge_id] = {
+                        "edge_id": edge_id,
+                        "agent_id": agent_id,
+                        "tool_name": tool_name,
+                        "tool_category": span.get("tc_tool_category", "internal_api"),
+                        "call_count": 0,
+                        "call_contexts": {"user": 0, "agent": 0, "external": 0, "memory": 0},
+                        "error_count": 0,
+                        "first_seen": span["timestamp"],
+                        "last_seen": span["timestamp"],
+                    }
+            edge = tool_edges[edge_id]
+            edge["call_count"] += 1
+            edge["last_seen"] = span["timestamp"]
+            source = span.get("tc_input_source", "user")
+            if source in edge["call_contexts"]:
+                edge["call_contexts"][source] += 1
+            if span.get("status_code") == "ERROR":
+                edge["error_count"] += 1
+
+    # Upsert agent edges (cumulative counts)
+    for edge in agent_edges.values():
+        obs = edge["observation_count"]
+        confidence = "HIGH" if obs >= 20 else ("MEDIUM" if obs >= 5 else "LOW")
+        execute(
+            "INSERT INTO topology_agent_edges VALUES",
+            [(
+                edge["edge_id"], edge["caller_agent_id"], edge["callee_agent_id"],
+                edge["channel"], obs, confidence,
+                edge["first_seen"], edge["last_seen"], now,
+            )],
+        )
+
+    # Upsert tool edges (cumulative counts)
+    for edge in tool_edges.values():
+        execute(
+            "INSERT INTO topology_tool_edges VALUES",
+            [(
+                edge["edge_id"], edge["agent_id"], edge["tool_name"],
+                edge["tool_category"], edge["call_count"],
+                json.dumps(edge["call_contexts"]),
+                "[]",  # last_parameters placeholder
+                edge["error_count"],
+                edge["first_seen"], edge["last_seen"], now,
+            )],
+        )
+
+
+def get_topology_graph() -> dict:
+    """Build the full topology graph for the API."""
+    agents = execute(
+        "SELECT agent_id, name, framework, role, model, tools_observed, maturity FROM agent_inventory FINAL"
+    )
+    agent_edges = execute(
+        "SELECT edge_id, caller_agent_id, callee_agent_id, channel, observation_count, confidence FROM topology_agent_edges FINAL"
+    )
+    tool_edges = execute(
+        "SELECT edge_id, agent_id, tool_name, tool_category, call_count FROM topology_tool_edges FINAL"
+    )
+
+    nodes = []
+    edges = []
+    tool_nodes_seen = set()
+
+    # Agent nodes
+    for row in agents:
+        nodes.append({
+            "id": row[0],
+            "type": "agent",
+            "label": row[1] or row[0],
+            "metadata": {
+                "framework": row[2],
+                "role": row[3],
+                "model": row[4],
+                "tools_observed": row[5],
+                "maturity": row[6],
+            },
+        })
+
+    # Agent->Agent edges
+    for row in agent_edges:
+        edges.append({
+            "id": row[0],
+            "source": row[1],
+            "target": row[2],
+            "type": "agent_to_agent",
+            "channel": row[3],
+            "observation_count": row[4],
+            "confidence": row[5],
+        })
+
+    # Tool nodes + Agent->Tool edges
+    for row in tool_edges:
+        tool_id = f"tool:{row[2]}"
+        if tool_id not in tool_nodes_seen:
+            tool_nodes_seen.add(tool_id)
+            nodes.append({
+                "id": tool_id,
+                "type": "tool",
+                "label": row[2],
+                "metadata": {"category": row[3]},
+            })
+        edges.append({
+            "id": row[0],
+            "source": row[1],
+            "target": tool_id,
+            "type": "agent_to_tool",
+            "call_count": row[4],
+        })
+
+    return {"nodes": nodes, "edges": edges}

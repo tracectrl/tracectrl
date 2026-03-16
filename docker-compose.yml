@@ -1,0 +1,60 @@
+version: '3.9'
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/config.yaml"]
+    volumes:
+      - ./config/otel-collector.yaml:/config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./config/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  tracectrl-engine:
+    build: ./engine
+    ports:
+      - "8000:8000"
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_DB=tracectrl
+      - PIPELINE_INTERVAL_SECONDS=60
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  tracectrl-ui:
+    build:
+      context: ./ui
+      args:
+        - VITE_ENGINE_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      tracectrl-engine:
+        condition: service_healthy
+
+volumes:
+  clickhouse-data:

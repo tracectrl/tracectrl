@@ -1,0 +1,6 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+apscheduler>=3.10.4
+clickhouse-driver>=0.2.7
+pydantic>=2.7.0
+networkx>=3.3

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tracectrl-instrumentation-strands"
+version = "0.1.0"
+description = "TraceCtrl AWS Strands instrumentation"
+requires-python = ">=3.10"
+dependencies = [
+    "tracectrl>=0.1.0",
+    "openinference-instrumentation-strands-agents>=0.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tracectrl"]

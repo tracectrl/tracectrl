@@ -1,0 +1,25 @@
+version: '3.9'
+
+services:
+  tracectrl-engine:
+    build:
+      context: ./engine
+      target: dev
+    volumes:
+      - ./engine:/app
+    environment:
+      - RELOAD=true
+    command: ["uvicorn", "engine.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  tracectrl-ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    volumes:
+      - ./ui:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_ENGINE_URL=http://localhost:8000
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
