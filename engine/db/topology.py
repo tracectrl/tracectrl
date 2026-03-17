@@ -230,8 +230,41 @@ def update_topology(spans: list[dict]):
         )
 
 
-def get_topology_graph() -> dict:
-    """Build the full topology graph for the API."""
+def _get_agent_ids_for_service(service: str) -> set[str]:
+    """Return the set of agent_ids that appear in spans for a given service.
+
+    Checks tracectrl.agent.id first, falls back to agno.agent.id,
+    then derives an ID from agent.name (lowercase, spaces to hyphens).
+    """
+    rows = execute(
+        """SELECT DISTINCT
+               SpanAttributes['tracectrl.agent.id'] AS tc_id,
+               SpanAttributes['agno.agent.id'] AS agno_id,
+               SpanAttributes['agent.name'] AS agent_name
+           FROM otel_traces
+           WHERE ServiceName = %(service)s
+             AND SpanAttributes['openinference.span.kind'] = 'AGENT'""",
+        {"service": service},
+    )
+    ids = set()
+    for row in rows:
+        tc_id, agno_id, agent_name = row[0], row[1], row[2]
+        agent_id = tc_id or agno_id or (agent_name.lower().replace(" ", "-") if agent_name else "")
+        if agent_id:
+            ids.add(agent_id)
+    return ids
+
+
+def get_topology_graph(service: str | None = None) -> dict:
+    """Build the full topology graph for the API.
+
+    When *service* is provided, only agents (and their edges) that appear
+    in spans for that ServiceName are included.
+    """
+    allowed_ids: set[str] | None = None
+    if service:
+        allowed_ids = _get_agent_ids_for_service(service)
+
     agents = execute(
         "SELECT agent_id, name, framework, role, model, tools_observed, maturity FROM agent_inventory FINAL"
     )
@@ -248,6 +281,8 @@ def get_topology_graph() -> dict:
 
     # Agent nodes
     for row in agents:
+        if allowed_ids is not None and row[0] not in allowed_ids:
+            continue
         nodes.append({
             "id": row[0],
             "type": "agent",
@@ -263,6 +298,8 @@ def get_topology_graph() -> dict:
 
     # Agent->Agent edges
     for row in agent_edges:
+        if allowed_ids is not None and (row[1] not in allowed_ids or row[2] not in allowed_ids):
+            continue
         edges.append({
             "id": row[0],
             "source": row[1],
@@ -275,6 +312,8 @@ def get_topology_graph() -> dict:
 
     # Tool nodes + Agent->Tool edges
     for row in tool_edges:
+        if allowed_ids is not None and row[1] not in allowed_ids:
+            continue
         tool_id = f"tool:{row[2]}"
         if tool_id not in tool_nodes_seen:
             tool_nodes_seen.add(tool_id)

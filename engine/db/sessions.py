@@ -3,10 +3,12 @@
 from engine.db.client import execute
 
 
-def get_session_list() -> list[dict]:
+def get_session_list(service: str | None = None) -> list[dict]:
     """Fetch recent traces grouped as sessions."""
+    service_filter = "AND ServiceName = %(service)s" if service else ""
+    params = {"service": service} if service else None
     rows = execute(
-        """
+        f"""
         SELECT
             TraceId,
             min(Timestamp)                                           AS start_time,
@@ -26,10 +28,12 @@ def get_session_list() -> list[dict]:
             maxIf(1, StatusCode = 'STATUS_CODE_ERROR')               AS has_error
         FROM otel_traces
         WHERE TraceId != ''
+          {service_filter}
         GROUP BY TraceId
         ORDER BY start_time DESC
         LIMIT 200
-        """
+        """,
+        params,
     )
 
     columns = [
@@ -88,7 +92,7 @@ def get_trace_spans(trace_id: str) -> list[dict]:
     return result
 
 
-def get_latest_trace_spans() -> list[dict]:
+def get_latest_trace_spans(service: str | None = None) -> list[dict]:
     """Fetch all spans from the most recent workflow run.
 
     Agno creates separate traces per agent.run(). To get the full
@@ -96,24 +100,35 @@ def get_latest_trace_spans() -> list[dict]:
     fetch ALL traces that started within 5 minutes of it — these
     are part of the same workflow execution.
     """
+    service_filter = "AND ServiceName = %(service)s" if service else ""
+    anchor_params: dict = {}
+    if service:
+        anchor_params["service"] = service
+
     rows = execute(
-        """
+        f"""
         SELECT min(Timestamp) AS latest_start
         FROM otel_traces
         WHERE TraceId IN (
             SELECT TraceId FROM otel_traces
+            WHERE 1=1 {service_filter}
             ORDER BY Timestamp DESC LIMIT 1
         )
-        """
+        """,
+        anchor_params or None,
     )
     if not rows or not rows[0][0]:
         return []
 
     latest_start = rows[0][0]
 
+    span_params: dict = {"start": latest_start}
+    if service:
+        span_params["service"] = service
+
     # Fetch all spans from traces that started within 5 min of the latest
     span_rows = execute(
-        """
+        f"""
         SELECT
             SpanId,
             ParentSpanId,
@@ -129,15 +144,17 @@ def get_latest_trace_spans() -> list[dict]:
         FROM otel_traces
         WHERE Timestamp >= %(start)s - INTERVAL 5 MINUTE
           AND Timestamp <= %(start)s + INTERVAL 10 MINUTE
+          {service_filter}
           AND TraceId IN (
             SELECT DISTINCT TraceId
             FROM otel_traces
             WHERE Timestamp >= %(start)s - INTERVAL 5 MINUTE
               AND Timestamp <= %(start)s + INTERVAL 5 MINUTE
+              {service_filter}
         )
         ORDER BY Timestamp ASC
         """,
-        {"start": latest_start},
+        span_params,
     )
 
     columns = [

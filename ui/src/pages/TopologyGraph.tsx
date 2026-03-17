@@ -5,8 +5,10 @@ import PhaseReplaySlider from '../components/PhaseReplaySlider'
 import { fetchTopologyGraph, TopologyGraph, TopologyNode } from '../api/client'
 import { fetchLatestSpans, SpanDetail } from '../api/sessions'
 import { usePhaseInference } from '../hooks/usePhaseInference'
+import { useProject } from '../context/ProjectContext'
 
 export default function TopologyGraphPage() {
+  const { selectedProject } = useProject()
   const [graph, setGraph] = useState<TopologyGraph | null>(null)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -16,13 +18,14 @@ export default function TopologyGraphPage() {
   const [replayNs, setReplayNs] = useState<number | null>(null)
 
   useEffect(() => {
-    fetchTopologyGraph()
+    setLoading(true)
+    fetchTopologyGraph(selectedProject)
       .then(setGraph)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
 
-    fetchLatestSpans().then(setLatestSpans).catch(() => {})
-  }, [])
+    fetchLatestSpans(selectedProject).then(setLatestSpans).catch(() => {})
+  }, [selectedProject])
 
   const handleNodeSelect = useCallback((node: TopologyNode | null) => {
     setSelectedNode(node)

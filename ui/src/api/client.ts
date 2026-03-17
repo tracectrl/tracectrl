@@ -24,8 +24,9 @@ export interface TopologyGraph {
   edges: TopologyEdge[]
 }
 
-export async function fetchTopologyGraph(): Promise<TopologyGraph> {
-  const res = await fetch(`${ENGINE_URL}/api/v1/topology/graph`)
+export async function fetchTopologyGraph(service?: string | null): Promise<TopologyGraph> {
+  const params = service ? `?service=${encodeURIComponent(service)}` : ''
+  const res = await fetch(`${ENGINE_URL}/api/v1/topology/graph${params}`)
   if (!res.ok) throw new Error(`Failed to fetch topology: ${res.statusText}`)
   return res.json()
 }

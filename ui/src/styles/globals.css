@@ -155,8 +155,15 @@ code, pre {
   line-height: 1.2;
 }
 
-.sidebar-logo h1 .accent {
+.logo-trace {
+  font-family: var(--font-sans);
+  color: var(--white);
+}
+
+.logo-ctrl {
+  font-family: var(--font-mono);
   color: var(--red);
+  font-weight: 600;
 }
 
 .sidebar-logo .subtitle {
@@ -1778,4 +1785,50 @@ h4 {
   font-size: 13px;
   color: var(--gray-500);
   text-align: center;
+}
+
+
+/* ── PROJECT SELECTOR ──────────────────────────────── */
+.sidebar-project-selector {
+  padding: var(--space-3) var(--space-6);
+  margin-bottom: var(--space-3);
+}
+
+.sidebar-project-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gray-500);
+  margin-bottom: var(--space-1);
+}
+
+.sidebar-project-select {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--white);
+  background: var(--dark-surface);
+  border: 1px solid var(--dark-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--duration-fast);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%236B6B6B' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+
+.sidebar-project-select:hover,
+.sidebar-project-select:focus {
+  border-color: var(--gray-700);
+}
+
+.sidebar-project-select option {
+  background: var(--dark);
+  color: var(--white);
 }

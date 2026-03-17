@@ -8,18 +8,18 @@ router = APIRouter(tags=["sessions"])
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
-async def list_sessions():
+async def list_sessions(service: str | None = None):
     try:
-        return get_session_list()
+        return get_session_list(service=service)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/sessions/latest-spans", response_model=list[SpanDetail])
-async def latest_spans():
+async def latest_spans(service: str | None = None):
     """Returns spans from the most recent trace."""
     try:
-        return get_latest_trace_spans()
+        return get_latest_trace_spans(service=service)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

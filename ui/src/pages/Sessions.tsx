@@ -2,10 +2,12 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { fetchSessions, fetchTraceSpans, SessionSummary, SpanDetail, formatDuration } from '../api/sessions'
 import TraceTreeView from '../components/TraceTreeView'
 import SpanDetailPanel from '../components/SpanDetailPanel'
+import { useProject } from '../context/ProjectContext'
 
 type SortKey = 'start_time' | 'total_duration_ns' | 'span_count' | 'root_span_name'
 
 export default function Sessions() {
+  const { selectedProject } = useProject()
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -19,11 +21,12 @@ export default function Sessions() {
   const [selectedSpan, setSelectedSpan] = useState<SpanDetail | null>(null)
 
   useEffect(() => {
-    fetchSessions()
+    setLoading(true)
+    fetchSessions(selectedProject)
       .then(setSessions)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [selectedProject])
 
   const sorted = useMemo(() => {
     const copy = [...sessions]

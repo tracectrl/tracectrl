@@ -33,8 +33,9 @@ export function formatDuration(ns: number): string {
   return `${(ns / 1_000_000_000).toFixed(2)}s`
 }
 
-export async function fetchSessions(): Promise<SessionSummary[]> {
-  const res = await fetch(`${ENGINE_URL}/api/v1/sessions`)
+export async function fetchSessions(service?: string | null): Promise<SessionSummary[]> {
+  const params = service ? `?service=${encodeURIComponent(service)}` : ''
+  const res = await fetch(`${ENGINE_URL}/api/v1/sessions${params}`)
   if (!res.ok) throw new Error(`Failed to fetch sessions: ${res.statusText}`)
   return res.json()
 }
@@ -45,8 +46,9 @@ export async function fetchTraceSpans(traceId: string): Promise<SpanDetail[]> {
   return res.json()
 }
 
-export async function fetchLatestSpans(): Promise<SpanDetail[]> {
-  const res = await fetch(`${ENGINE_URL}/api/v1/sessions/latest-spans`)
+export async function fetchLatestSpans(service?: string | null): Promise<SpanDetail[]> {
+  const params = service ? `?service=${encodeURIComponent(service)}` : ''
+  const res = await fetch(`${ENGINE_URL}/api/v1/sessions/latest-spans${params}`)
   if (!res.ok) throw new Error(`Failed to fetch latest spans: ${res.statusText}`)
   return res.json()
 }
