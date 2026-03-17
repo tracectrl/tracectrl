@@ -1,7 +1,7 @@
 """Sessions API routes — session list and span tree."""
 
 from fastapi import APIRouter, HTTPException
-from engine.db.sessions import get_session_list, get_trace_spans
+from engine.db.sessions import get_session_list, get_trace_spans, get_latest_trace_spans
 from engine.api.models import SessionSummary, SpanDetail
 
 router = APIRouter(tags=["sessions"])
@@ -11,6 +11,15 @@ router = APIRouter(tags=["sessions"])
 async def list_sessions():
     try:
         return get_session_list()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions/latest-spans", response_model=list[SpanDetail])
+async def latest_spans():
+    """Returns spans from the most recent trace."""
+    try:
+        return get_latest_trace_spans()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

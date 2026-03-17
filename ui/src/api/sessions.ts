@@ -44,3 +44,9 @@ export async function fetchTraceSpans(traceId: string): Promise<SpanDetail[]> {
   if (!res.ok) throw new Error(`Failed to fetch spans: ${res.statusText}`)
   return res.json()
 }
+
+export async function fetchLatestSpans(): Promise<SpanDetail[]> {
+  const res = await fetch(`${ENGINE_URL}/api/v1/sessions/latest-spans`)
+  if (!res.ok) throw new Error(`Failed to fetch latest spans: ${res.statusText}`)
+  return res.json()
+}

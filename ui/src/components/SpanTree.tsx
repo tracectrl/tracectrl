@@ -1,10 +1,6 @@
 import { useState, useMemo } from 'react'
 import { SpanDetail, formatDuration } from '../api/sessions'
-
-interface SpanNode extends SpanDetail {
-  depth: number
-  children: SpanNode[]
-}
+import { SpanNode, getSpanType, typeBadgeClass, durationFillClass, buildTree } from '../lib/spanUtils'
 
 interface SpanTreeProps {
   spans: SpanDetail[]
@@ -14,73 +10,12 @@ interface SpanTreeProps {
   onSpanSelect: (span: SpanDetail) => void
 }
 
-function getSpanType(span: SpanDetail): string {
-  return span.attributes['openinference.span.kind']
-    || span.attributes['oi.span_kind']
-    || span.span_kind
-    || 'INTERNAL'
-}
-
-function typeBadgeClass(type: string): string {
-  const t = type.toUpperCase()
-  if (t === 'AGENT') return 'badge badge-agent'
-  if (t === 'TOOL') return 'badge badge-tool'
-  if (t === 'LLM') return 'badge badge-llm'
-  if (t === 'CHAIN') return 'badge badge-chain'
-  if (t === 'RETRIEVER') return 'badge badge-retriever'
-  if (t === 'EMBEDDING') return 'badge badge-embedding'
-  return 'badge badge-default'
-}
-
-function durationFillClass(type: string): string {
-  const t = type.toUpperCase()
-  if (t === 'AGENT') return 'duration-fill duration-fill-agent'
-  if (t === 'TOOL') return 'duration-fill duration-fill-tool'
-  if (t === 'LLM') return 'duration-fill duration-fill-llm'
-  if (t === 'CHAIN') return 'duration-fill duration-fill-chain'
-  if (t === 'RETRIEVER') return 'duration-fill duration-fill-retriever'
-  return 'duration-fill duration-fill-default'
-}
-
-function buildTree(spans: SpanDetail[]): SpanNode[] {
-  const nodeMap = new Map<string, SpanNode>()
-
-  // Create nodes
-  for (const span of spans) {
-    nodeMap.set(span.span_id, { ...span, depth: 0, children: [] })
-  }
-
-  const roots: SpanNode[] = []
-
-  // Link children to parents
-  for (const node of nodeMap.values()) {
-    if (node.parent_span_id && nodeMap.has(node.parent_span_id)) {
-      nodeMap.get(node.parent_span_id)!.children.push(node)
-    } else {
-      roots.push(node)
-    }
-  }
-
-  // Assign depths via DFS
-  function assignDepth(node: SpanNode, depth: number) {
-    node.depth = depth
-    for (const child of node.children) {
-      assignDepth(child, depth + 1)
-    }
-  }
-  roots.forEach(r => assignDepth(r, 0))
-
-  return roots
-}
-
 function flattenVisible(roots: SpanNode[], collapsed: Set<string>): SpanNode[] {
   const result: SpanNode[] = []
   function dfs(node: SpanNode) {
     result.push(node)
     if (!collapsed.has(node.span_id)) {
-      for (const child of node.children) {
-        dfs(child)
-      }
+      for (const child of node.children) dfs(child)
     }
   }
   roots.forEach(dfs)

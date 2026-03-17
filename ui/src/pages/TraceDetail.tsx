@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import SpanTree from '../components/SpanTree'
+import SpanTimeline from '../components/SpanTimeline'
 import SpanDetailPanel from '../components/SpanDetailPanel'
 import { fetchTraceSpans, SpanDetail, formatDuration } from '../api/sessions'
 
@@ -11,6 +12,7 @@ export default function TraceDetail() {
   const [selectedSpan, setSelectedSpan] = useState<SpanDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'tree' | 'timeline'>('tree')
 
   useEffect(() => {
     if (!traceId) return
@@ -26,12 +28,12 @@ export default function TraceDetail() {
 
   const traceStartNs = useMemo(() => {
     if (spans.length === 0) return 0
-    return Math.min(...spans.map(s => s.start_ns))
+    return spans.reduce((min, s) => Math.min(min, s.start_ns), spans[0].start_ns)
   }, [spans])
 
   const traceDurationNs = useMemo(() => {
     if (spans.length === 0) return 0
-    const maxEnd = Math.max(...spans.map(s => s.start_ns + s.duration_ns))
+    const maxEnd = spans.reduce((max, s) => Math.max(max, s.start_ns + s.duration_ns), 0)
     return maxEnd - traceStartNs
   }, [spans, traceStartNs])
 
@@ -66,20 +68,48 @@ export default function TraceDetail() {
           ))}
         </div>
       ) : (
-        <div className="trace-detail-layout">
-          <div className="trace-tree-area">
-            <div className="table-container">
-              <SpanTree
-                spans={spans}
-                traceDurationNs={traceDurationNs}
-                traceStartNs={traceStartNs}
-                selectedSpanId={selectedSpan?.span_id || null}
-                onSpanSelect={handleSpanSelect}
-              />
-            </div>
+        <>
+          {/* Tab bar */}
+          <div className="trace-tabs">
+            <button
+              className={`trace-tab${activeTab === 'tree' ? ' active' : ''}`}
+              onClick={() => setActiveTab('tree')}
+            >
+              Span Tree
+            </button>
+            <button
+              className={`trace-tab${activeTab === 'timeline' ? ' active' : ''}`}
+              onClick={() => setActiveTab('timeline')}
+            >
+              Timeline
+            </button>
           </div>
-          <SpanDetailPanel span={selectedSpan} onClose={() => setSelectedSpan(null)} />
-        </div>
+
+          <div className="trace-detail-layout">
+            <div className="trace-tree-area">
+              <div className="table-container">
+                {activeTab === 'tree' ? (
+                  <SpanTree
+                    spans={spans}
+                    traceDurationNs={traceDurationNs}
+                    traceStartNs={traceStartNs}
+                    selectedSpanId={selectedSpan?.span_id || null}
+                    onSpanSelect={handleSpanSelect}
+                  />
+                ) : (
+                  <SpanTimeline
+                    spans={spans}
+                    traceDurationNs={traceDurationNs}
+                    traceStartNs={traceStartNs}
+                    selectedSpanId={selectedSpan?.span_id || null}
+                    onSpanSelect={handleSpanSelect}
+                  />
+                )}
+              </div>
+            </div>
+            <SpanDetailPanel span={selectedSpan} onClose={() => setSelectedSpan(null)} />
+          </div>
+        </>
       )}
     </div>
   )

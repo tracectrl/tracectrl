@@ -1,20 +1,81 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import cytoscape, { Core } from 'cytoscape'
 import dagre from 'cytoscape-dagre'
 import { TopologyGraph, TopologyNode } from '../api/client'
+import { PhaseGroup } from '../hooks/usePhaseInference'
 
 cytoscape.use(dagre)
+
+interface PhaseBox {
+  phaseIndex: number
+  x: number
+  y: number
+  w: number
+  h: number
+}
 
 interface GraphCanvasProps {
   data: TopologyGraph | null
   onNodeSelect: (node: TopologyNode | null) => void
+  highlightedNodeIds?: Set<string>
+  phaseGroups?: PhaseGroup[]
+  showPhases?: boolean
 }
 
-export default function GraphCanvas({ data, onNodeSelect }: GraphCanvasProps) {
+export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
   const onNodeSelectRef = useRef(onNodeSelect)
   onNodeSelectRef.current = onNodeSelect
+
+  const [phaseBoxes, setPhaseBoxes] = useState<PhaseBox[]>([])
+
+  const recalcPhaseBoxes = useCallback(() => {
+    const cy = cyRef.current
+    if (!cy || !phaseGroups || !showPhases) {
+      setPhaseBoxes([])
+      return
+    }
+
+    const boxes: PhaseBox[] = []
+    for (const phase of phaseGroups) {
+      const matchingNodes: cytoscape.NodeSingular[] = []
+      cy.nodes().forEach((node) => {
+        const nodeId = node.data('id') as string
+        const nodeLabel = node.data('label') as string
+        if (
+          phase.agentIds.includes(nodeId) ||
+          phase.agentIds.includes(nodeLabel?.toLowerCase().replace(/\s+/g, '-'))
+        ) {
+          matchingNodes.push(node)
+        }
+      })
+
+      if (matchingNodes.length === 0) continue
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const node of matchingNodes) {
+        const bb = node.renderedBoundingBox()
+        if (bb.x1 < minX) minX = bb.x1
+        if (bb.y1 < minY) minY = bb.y1
+        if (bb.x2 > maxX) maxX = bb.x2
+        if (bb.y2 > maxY) maxY = bb.y2
+      }
+
+      const pad = 20
+      boxes.push({
+        phaseIndex: phase.phaseIndex,
+        x: minX - pad,
+        y: minY - pad,
+        w: maxX - minX + pad * 2,
+        h: maxY - minY + pad * 2,
+      })
+    }
+    setPhaseBoxes(boxes)
+  }, [phaseGroups, showPhases])
+
+  const recalcRef = useRef(recalcPhaseBoxes)
+  recalcRef.current = recalcPhaseBoxes
 
   // Layout effect — only re-runs when graph data changes
   useEffect(() => {
@@ -165,15 +226,108 @@ export default function GraphCanvas({ data, onNodeSelect }: GraphCanvasProps) {
       }
     })
 
+    // Subscribe to render event to recalculate phase boxes on pan/zoom
+    cyRef.current.on('render', () => {
+      recalcRef.current()
+    })
+
     return () => {
       cyRef.current?.destroy()
       cyRef.current = null
     }
   }, [data])
 
+  // Highlight effect — reacts to highlightedNodeIds changes
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+
+    cy.startBatch()
+    if (highlightedNodeIds && highlightedNodeIds.size > 0) {
+      cy.nodes().forEach((node) => {
+        const nodeId = node.data('id') as string
+        const nodeLabel = node.data('label') as string
+        const isHighlighted =
+          highlightedNodeIds.has(nodeId) ||
+          highlightedNodeIds.has(nodeLabel?.toLowerCase().replace(/\s+/g, '-'))
+        node.style('opacity', isHighlighted ? 1.0 : 0.2)
+      })
+      cy.edges().forEach((edge) => {
+        edge.style('opacity', 0.2)
+      })
+    } else {
+      cy.nodes().forEach((node) => {
+        node.style('opacity', 1.0)
+      })
+      cy.edges().forEach((edge) => {
+        edge.removeStyle('opacity')
+      })
+    }
+    cy.endBatch()
+  }, [highlightedNodeIds])
+
+  // Recalculate phase boxes when showPhases or phaseGroups change
+  useEffect(() => {
+    recalcPhaseBoxes()
+  }, [recalcPhaseBoxes])
+
   return (
     <div className="graph-canvas-wrapper">
       <div ref={containerRef} className="graph-canvas" />
+      {/* Phase group boxes */}
+      {showPhases && phaseBoxes.map((box) => (
+        <div
+          key={`phase-${box.phaseIndex}`}
+          className="phase-overlay-box"
+          style={{
+            left: box.x,
+            top: box.y,
+            width: box.w,
+            height: box.h,
+          }}
+        >
+          <div className="phase-overlay-label">Phase {box.phaseIndex + 1}</div>
+        </div>
+      ))}
+      {/* "then" arrows between consecutive phase boxes */}
+      {showPhases && phaseBoxes.length > 1 && (
+        <svg style={{
+          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+          pointerEvents: 'none', zIndex: 6,
+        }}>
+          <defs>
+            <marker id="phase-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L8,3 L0,6" fill="none" stroke="#40706C" strokeWidth="1.5" />
+            </marker>
+          </defs>
+          {phaseBoxes.slice(0, -1).map((box, i) => {
+            const next = phaseBoxes[i + 1]
+            const x1 = box.x + box.w / 2
+            const y1 = box.y + box.h
+            const x2 = next.x + next.w / 2
+            const y2 = next.y
+            const mx = (x1 + x2) / 2
+            const my = (y1 + y2) / 2
+            return (
+              <g key={`arrow-${i}`}>
+                <line
+                  x1={x1} y1={y1 + 4} x2={x2} y2={y2 - 4}
+                  stroke="#40706C" strokeWidth="1.5" strokeDasharray="6,4"
+                  markerEnd="url(#phase-arrow)" opacity="0.7"
+                />
+                <rect x={mx - 16} y={my - 8} width="32" height="16" rx="4"
+                  fill="#0A0A0A" stroke="#40706C" strokeWidth="0.5" opacity="0.9"
+                />
+                <text x={mx} y={my + 4} textAnchor="middle" fontSize="9"
+                  fontFamily="'JetBrains Mono', monospace" fill="#40706C" opacity="0.8"
+                >
+                  then
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+      )}
       <div className="graph-legend">
         <div className="graph-legend-item">
           <span className="graph-legend-dot" style={{ background: '#4A90D9' }} />
@@ -192,6 +346,15 @@ export default function GraphCanvas({ data, onNodeSelect }: GraphCanvasProps) {
           <span className="graph-legend-line graph-legend-line-dashed" />
           uses
         </div>
+        {showPhases && (
+          <>
+            <div className="graph-legend-divider" />
+            <div className="graph-legend-item">
+              <span className="graph-legend-line graph-legend-line-dashed" style={{ background: 'repeating-linear-gradient(to right, #40706C 0px, #40706C 4px, transparent 4px, transparent 7px)' }} />
+              then
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

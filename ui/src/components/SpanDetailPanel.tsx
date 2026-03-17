@@ -1,15 +1,10 @@
 import { SpanDetail, formatDuration } from '../api/sessions'
+import { getSpanType } from '../lib/spanUtils'
 
 interface SpanDetailPanelProps {
   span: SpanDetail | null
   onClose: () => void
-}
-
-function getSpanType(span: SpanDetail): string {
-  return span.attributes['openinference.span.kind']
-    || span.attributes['oi.span_kind']
-    || span.span_kind
-    || 'INTERNAL'
+  inline?: boolean
 }
 
 function formatTimestamp(ns: number): string {
@@ -37,7 +32,7 @@ function groupAttributes(attrs: Record<string, string>): { label: string; entrie
     .map(([label, entries]) => ({ label, entries }))
 }
 
-export default function SpanDetailPanel({ span, onClose }: SpanDetailPanelProps) {
+export default function SpanDetailPanel({ span, onClose, inline }: SpanDetailPanelProps) {
   if (!span) return null
 
   const type = getSpanType(span)
@@ -48,7 +43,7 @@ export default function SpanDetailPanel({ span, onClose }: SpanDetailPanelProps)
   const resourceEntries = Object.entries(span.resource_attributes).filter(([, v]) => v)
 
   return (
-    <div className={`detail-panel open`}>
+    <div className={inline ? 'trace-inline-detail' : 'detail-panel open'}>
       <div className="detail-panel-header">
         <h3 title={span.span_name}>{span.span_name}</h3>
         <button className="detail-panel-close" onClick={onClose}>

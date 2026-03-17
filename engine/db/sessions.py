@@ -86,3 +86,71 @@ def get_trace_spans(trace_id: str) -> list[dict]:
             d["parent_span_id"] = ""
         result.append(d)
     return result
+
+
+def get_latest_trace_spans() -> list[dict]:
+    """Fetch all spans from the most recent workflow run.
+
+    Agno creates separate traces per agent.run(). To get the full
+    workflow picture, we find the latest trace's start time, then
+    fetch ALL traces that started within 5 minutes of it — these
+    are part of the same workflow execution.
+    """
+    rows = execute(
+        """
+        SELECT min(Timestamp) AS latest_start
+        FROM otel_traces
+        WHERE TraceId IN (
+            SELECT TraceId FROM otel_traces
+            ORDER BY Timestamp DESC LIMIT 1
+        )
+        """
+    )
+    if not rows or not rows[0][0]:
+        return []
+
+    latest_start = rows[0][0]
+
+    # Fetch all spans from traces that started within 5 min of the latest
+    span_rows = execute(
+        """
+        SELECT
+            SpanId,
+            ParentSpanId,
+            SpanName,
+            SpanKind,
+            ServiceName,
+            toUnixTimestamp64Nano(Timestamp)    AS start_ns,
+            Duration                            AS duration_ns,
+            StatusCode,
+            StatusMessage,
+            SpanAttributes,
+            ResourceAttributes
+        FROM otel_traces
+        WHERE Timestamp >= %(start)s - INTERVAL 5 MINUTE
+          AND Timestamp <= %(start)s + INTERVAL 10 MINUTE
+          AND TraceId IN (
+            SELECT DISTINCT TraceId
+            FROM otel_traces
+            WHERE Timestamp >= %(start)s - INTERVAL 5 MINUTE
+              AND Timestamp <= %(start)s + INTERVAL 5 MINUTE
+        )
+        ORDER BY Timestamp ASC
+        """,
+        {"start": latest_start},
+    )
+
+    columns = [
+        "span_id", "parent_span_id", "span_name", "span_kind",
+        "service_name", "start_ns", "duration_ns", "status_code",
+        "status_message", "attributes", "resource_attributes",
+    ]
+    result = []
+    for row in span_rows:
+        d = dict(zip(columns, row))
+        d["attributes"] = d["attributes"] or {}
+        d["resource_attributes"] = d["resource_attributes"] or {}
+        if d["parent_span_id"] == "0000000000000000":
+            d["parent_span_id"] = ""
+        result.append(d)
+    return result
