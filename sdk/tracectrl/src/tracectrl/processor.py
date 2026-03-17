@@ -6,6 +6,13 @@ from tracectrl import schema
 from tracectrl.inference import infer_tool_category
 from tracectrl.session import current_session_id
 
+# OpenInference / Agno attribute keys (set by framework instrumentors)
+_OI_SPAN_KIND = "openinference.span.kind"
+_OI_AGENT_NAME = "agent.name"
+_AGNO_AGENT_ID = "agno.agent.id"
+_AGNO_TEAM_ID = "agno.team.id"
+_AGNO_SESSION_ID = "session.id"
+
 
 class TraceCtrlSpanProcessor(SpanProcessor):
     """
@@ -30,6 +37,26 @@ class TraceCtrlSpanProcessor(SpanProcessor):
                     span._attributes[key] = value
                 except (TypeError, AttributeError):
                     pass
+
+        # Agent identity — derive from OpenInference/Agno attributes
+        oi_kind = attrs.get(_OI_SPAN_KIND, "")
+        if oi_kind == "AGENT" and not attrs.get(schema.TC_AGENT_ID):
+            agent_id = attrs.get(_AGNO_AGENT_ID) or attrs.get(_AGNO_TEAM_ID) or ""
+            agent_name = attrs.get(_OI_AGENT_NAME, "")
+            # Fall back: derive ID from name if agno.agent.id is missing
+            if not agent_id and agent_name:
+                agent_id = agent_name.lower().replace(" ", "-")
+            if agent_id:
+                _set(schema.TC_AGENT_ID, agent_id)
+            if agent_name:
+                _set(schema.TC_AGENT_NAME, agent_name)
+            _set(schema.TC_AGENT_FRAMEWORK, "agno")
+
+        # Session ID — fall back to Agno's session.id
+        if not attrs.get(schema.TC_SESSION_ID):
+            agno_session = attrs.get(_AGNO_SESSION_ID, "")
+            if agno_session:
+                _set(schema.TC_SESSION_ID, agno_session)
 
         # Tool category inference
         tool_name = attrs.get(schema.TOOL_NAME, "")

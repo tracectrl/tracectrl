@@ -56,11 +56,46 @@ def update_topology(spans: list[dict]):
     tool_edges: dict[str, dict] = {}
     now = datetime.utcnow()
 
+    # --- Pre-processing: resolve owning agent via parent_span_id ---
+    # Key by (trace_id, span_id) to avoid cross-trace collisions.
+    # Build initial lookup from AGENT spans, then iteratively propagate
+    # through intermediate spans (e.g. LLM spans between AGENT and TOOL).
+    span_key_to_agent: dict[tuple[str, str], str] = {}
+    span_key_to_parent: dict[tuple[str, str], tuple[str, str]] = {}
+
+    for span in spans:
+        tid = span.get("trace_id", "")
+        sid = span.get("span_id", "")
+        psid = span.get("parent_span_id", "")
+        if tid and sid:
+            if span.get("oi_span_kind") == "AGENT" and span.get("tc_agent_id"):
+                span_key_to_agent[(tid, sid)] = span["tc_agent_id"]
+            if psid:
+                span_key_to_parent[(tid, sid)] = (tid, psid)
+
+    # Iteratively propagate agent ownership through the span tree
+    # (handles multi-level: AGENT → LLM → TOOL)
+    changed = True
+    while changed:
+        changed = False
+        for key, parent_key in span_key_to_parent.items():
+            if key not in span_key_to_agent and parent_key in span_key_to_agent:
+                span_key_to_agent[key] = span_key_to_agent[parent_key]
+                changed = True
+
+    # Apply resolved agent IDs to spans that lack them
+    for span in spans:
+        if not span.get("tc_agent_id"):
+            key = (span.get("trace_id", ""), span.get("span_id", ""))
+            if key in span_key_to_agent:
+                span["tc_agent_id"] = span_key_to_agent[key]
+
     for span in spans:
         agent_id = span.get("tc_agent_id", "")
         caller_id = span.get("tc_caller_agent_id", "")
+        parent_sid = span.get("parent_span_id", "")
 
-        # Agent->Agent edges
+        # Agent->Agent edges (explicit caller_id or team→member via parent)
         if agent_id and caller_id:
             edge_key = f"{caller_id}:{agent_id}"
             edge_id = hashlib.md5(edge_key.encode()).hexdigest()[:16]
@@ -88,6 +123,44 @@ def update_topology(spans: list[dict]):
                     }
             agent_edges[edge_id]["observation_count"] += 1
             agent_edges[edge_id]["last_seen"] = span["timestamp"]
+
+        # Team→member edges: AGENT span whose parent is also an AGENT span
+        parent_key = (span.get("trace_id", ""), parent_sid) if parent_sid else None
+        if (
+            span.get("oi_span_kind") == "AGENT"
+            and agent_id
+            and not caller_id
+            and parent_key
+            and parent_key in span_key_to_agent
+        ):
+            parent_agent_id = span_key_to_agent[parent_key]
+            if parent_agent_id != agent_id:
+                edge_key = f"{parent_agent_id}:{agent_id}"
+                edge_id = hashlib.md5(edge_key.encode()).hexdigest()[:16]
+                if edge_id not in agent_edges:
+                    existing = _get_existing_agent_edge(edge_id)
+                    if existing:
+                        agent_edges[edge_id] = {
+                            "edge_id": edge_id,
+                            "caller_agent_id": parent_agent_id,
+                            "callee_agent_id": agent_id,
+                            "channel": "team_member",
+                            "observation_count": existing["observation_count"],
+                            "first_seen": existing["first_seen"],
+                            "last_seen": span["timestamp"],
+                        }
+                    else:
+                        agent_edges[edge_id] = {
+                            "edge_id": edge_id,
+                            "caller_agent_id": parent_agent_id,
+                            "callee_agent_id": agent_id,
+                            "channel": "team_member",
+                            "observation_count": 0,
+                            "first_seen": span["timestamp"],
+                            "last_seen": span["timestamp"],
+                        }
+                agent_edges[edge_id]["observation_count"] += 1
+                agent_edges[edge_id]["last_seen"] = span["timestamp"]
 
         # Agent->Tool edges
         tool_name = span.get("tool_name", "")
@@ -123,7 +196,7 @@ def update_topology(spans: list[dict]):
             edge = tool_edges[edge_id]
             edge["call_count"] += 1
             edge["last_seen"] = span["timestamp"]
-            source = span.get("tc_input_source", "user")
+            source = span.get("tc_input_source") or "user"
             if source in edge["call_contexts"]:
                 edge["call_contexts"][source] += 1
             if span.get("status_code") == "ERROR":
@@ -217,6 +290,7 @@ def get_topology_graph() -> dict:
             "target": tool_id,
             "type": "agent_to_tool",
             "call_count": row[4],
+            "tool_category": row[3],
         })
 
     return {"nodes": nodes, "edges": edges}

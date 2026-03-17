@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
 import TopologyGraph from './pages/TopologyGraph'
 import Sessions from './pages/Sessions'
+import TraceDetail from './pages/TraceDetail'
 import RiskDashboard from './pages/RiskDashboard'
 import AttackPaths from './pages/AttackPaths'
 
@@ -26,7 +27,7 @@ function Sidebar() {
         <Link
           key={item.href}
           to={item.href}
-          className={`nav-link${location.pathname === item.href ? ' active' : ''}`}
+          className={`nav-link${location.pathname === item.href || location.pathname.startsWith(item.href + '/') ? ' active' : ''}`}
         >
           {item.label}
         </Link>
@@ -37,7 +38,7 @@ function Sidebar() {
         <Link
           key={item.href}
           to={item.href}
-          className={`nav-link${location.pathname === item.href ? ' active' : ''}`}
+          className={`nav-link${location.pathname === item.href || location.pathname.startsWith(item.href + '/') ? ' active' : ''}`}
         >
           {item.label}
         </Link>
@@ -61,6 +62,7 @@ function App() {
             <Route path="/" element={<Navigate to="/topology" replace />} />
             <Route path="/topology" element={<TopologyGraph />} />
             <Route path="/sessions" element={<Sessions />} />
+            <Route path="/sessions/:traceId" element={<TraceDetail />} />
             <Route path="/risk" element={<RiskDashboard />} />
             <Route path="/attacks" element={<AttackPaths />} />
           </Routes>

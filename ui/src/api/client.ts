@@ -2,7 +2,7 @@ const ENGINE_URL = import.meta.env.VITE_ENGINE_URL || 'http://localhost:8000'
 
 export interface TopologyNode {
   id: string
-  type: 'agent' | 'tool' | 'datasource'
+  type: 'agent' | 'tool'
   label: string
   metadata: Record<string, unknown>
 }
@@ -12,9 +12,11 @@ export interface TopologyEdge {
   source: string
   target: string
   type: string
+  channel?: string
   observation_count?: number
   call_count?: number
   confidence?: string
+  tool_category?: string
 }
 
 export interface TopologyGraph {

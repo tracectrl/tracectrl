@@ -20,18 +20,26 @@ export default function TopologyGraphPage() {
     setSelectedNode(node)
   }, [])
 
+  const agentCount = graph?.nodes.filter(n => n.type === 'agent').length ?? 0
+  const toolCount = graph?.nodes.filter(n => n.type === 'tool').length ?? 0
+
   return (
     <div>
-      <div className="page-header">
-        <div className="section-tag">Topology</div>
-        <h2>Agent Topology</h2>
-        <p className="page-meta">
-          {loading
-            ? 'Loading graph...'
-            : graph
-              ? `${graph.nodes.length} nodes · ${graph.edges.length} edges`
-              : 'No data'}
-        </p>
+      <div className="page-header flex justify-between items-center">
+        <div>
+          <div className="section-tag">Topology</div>
+          <h2>Agent Topology</h2>
+          <p className="page-meta">
+            {loading
+              ? 'Loading graph...'
+              : graph
+                ? `${agentCount} agents · ${toolCount} tools · ${graph.edges.length} connections`
+                : 'No data'}
+          </p>
+        </div>
+        {!loading && graph && (
+          <div className="live-indicator">Live</div>
+        )}
       </div>
 
       {error && <div className="error-banner">{error}</div>}

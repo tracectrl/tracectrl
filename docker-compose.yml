@@ -21,6 +21,7 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./config/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./config/clickhouse-users.xml:/etc/clickhouse-server/users.d/default-user.xml
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 5s
@@ -40,7 +41,7 @@ services:
       clickhouse:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
