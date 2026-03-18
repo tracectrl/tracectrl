@@ -96,7 +96,7 @@ def update_agent_inventory(spans: list[dict]):
         )
 
 
-def get_all_agents() -> list[dict]:
+def get_all_agents(service: str | None = None) -> list[dict]:
     """Fetch all agents from inventory using FINAL for deduplication."""
     rows = execute(
         """
@@ -111,6 +111,46 @@ def get_all_agents() -> list[dict]:
         "agent_id", "name", "framework", "role", "model",
         "tools_observed", "system_prompt_hash", "run_count",
         "observation_count", "maturity", "first_seen", "last_seen",
+    ]
+    results = [dict(zip(columns, row)) for row in rows]
+
+    if service:
+        svc_rows = execute(
+            """
+            SELECT DISTINCT
+                SpanAttributes['tracectrl.agent.id'] AS tc_id,
+                SpanAttributes['agno.agent.id'] AS agno_id,
+                SpanAttributes['agent.name'] AS agent_name
+            FROM otel_traces
+            WHERE ServiceName = %(service)s
+              AND SpanAttributes['openinference.span.kind'] = 'AGENT'
+            """,
+            {"service": service},
+        )
+        allowed_ids = set()
+        for r in svc_rows:
+            for val in r:
+                if val:
+                    allowed_ids.add(val)
+        results = [a for a in results if a["agent_id"] in allowed_ids]
+
+    return results
+
+
+def get_tools_for_agent(agent_id: str) -> list[dict]:
+    rows = execute(
+        """
+        SELECT tool_name, tool_category, call_count, error_count,
+               first_seen, last_seen
+        FROM topology_tool_edges FINAL
+        WHERE agent_id = %(id)s
+        ORDER BY call_count DESC
+        """,
+        {"id": agent_id},
+    )
+    columns = [
+        "tool_name", "tool_category", "call_count", "error_count",
+        "first_seen", "last_seen",
     ]
     return [dict(zip(columns, row)) for row in rows]
 

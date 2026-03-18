@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
 import TopologyGraph from './pages/TopologyGraph'
 import Sessions from './pages/Sessions'
+import Agents from './pages/Agents'
 import TraceDetail from './pages/TraceDetail'
 import RiskDashboard from './pages/RiskDashboard'
 import AttackPaths from './pages/AttackPaths'
@@ -13,6 +14,7 @@ function Sidebar() {
   const navItems = [
     { href: '/topology', label: 'Topology' },
     { href: '/sessions', label: 'Sessions' },
+    { href: '/agents', label: 'Agents' },
     { href: '/risk', label: 'Risk Dashboard' },
     { href: '/attacks', label: 'Attack Paths' },
   ]
@@ -40,7 +42,7 @@ function Sidebar() {
       </div>
 
       <div className="sidebar-section-label">Monitor</div>
-      {navItems.slice(0, 2).map(item => (
+      {navItems.slice(0, 3).map(item => (
         <Link
           key={item.href}
           to={item.href}
@@ -51,7 +53,7 @@ function Sidebar() {
       ))}
 
       <div className="sidebar-section-label">Security</div>
-      {navItems.slice(2).map(item => (
+      {navItems.slice(3).map(item => (
         <Link
           key={item.href}
           to={item.href}
@@ -81,6 +83,7 @@ function App() {
               <Route path="/topology" element={<TopologyGraph />} />
               <Route path="/sessions" element={<Sessions />} />
               <Route path="/sessions/:traceId" element={<TraceDetail />} />
+              <Route path="/agents" element={<Agents />} />
               <Route path="/risk" element={<RiskDashboard />} />
               <Route path="/attacks" element={<AttackPaths />} />
             </Routes>
