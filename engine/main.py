@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from engine.scheduler import start_scheduler, stop_scheduler
-from engine.api.routes import topology, system, sessions
+from engine.api.routes import topology, system, sessions, agents
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -35,3 +35,4 @@ app.add_middleware(
 app.include_router(system.router, prefix="/api/v1")
 app.include_router(topology.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
+app.include_router(agents.router, prefix="/api/v1")

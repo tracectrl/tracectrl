@@ -16,6 +16,30 @@ class SessionSummary(BaseModel):
     has_error: bool
 
 
+class AgentSummary(BaseModel):
+    agent_id: str
+    name: str
+    framework: str
+    role: str
+    model: str
+    tools_observed: list[str]
+    system_prompt_hash: str
+    run_count: int
+    observation_count: int
+    maturity: str
+    first_seen: datetime
+    last_seen: datetime
+
+
+class AgentTool(BaseModel):
+    tool_name: str
+    tool_category: str
+    call_count: int
+    error_count: int
+    first_seen: datetime
+    last_seen: datetime
+
+
 class SpanDetail(BaseModel):
     span_id: str
     parent_span_id: str
