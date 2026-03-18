@@ -20,7 +20,7 @@ function Sidebar() {
   return (
     <nav className="sidebar">
       <div className="sidebar-logo">
-        <h1><span className="logo-trace">Trace</span><span className="logo-ctrl">Ctrl</span></h1>
+        <h1><span className="logo-trace">trace</span><span className="logo-ctrl">ctrl</span></h1>
         <div className="subtitle">Security Observability</div>
       </div>
 
