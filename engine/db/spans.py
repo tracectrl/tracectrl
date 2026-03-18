@@ -56,11 +56,21 @@ def fetch_new_spans(since: datetime) -> list[dict]:
             "tool_description": attrs.get("tool.description", ""),
             "tool_parameters": attrs.get("tool.parameters", ""),
             # TraceCtrl security fields from SpanAttributes map
-            "tc_agent_id": attrs.get("tracectrl.agent.id", ""),
-            "tc_agent_name": attrs.get("tracectrl.agent.name", ""),
+            # Fall back to OpenInference/Agno attributes if tracectrl.* not set
+            "tc_agent_id": (attrs.get("tracectrl.agent.id")
+                            or attrs.get("agno.agent.id")
+                            or attrs.get("agno.team.id")
+                            or ""),
+            "tc_agent_name": (attrs.get("tracectrl.agent.name")
+                              or attrs.get("agent.name")
+                              or ""),
             "tc_agent_role": attrs.get("tracectrl.agent.role", ""),
-            "tc_agent_framework": attrs.get("tracectrl.agent.framework", ""),
-            "tc_session_id": attrs.get("tracectrl.session_id", ""),
+            "tc_agent_framework": attrs.get("tracectrl.agent.framework")
+                                  or ("agno" if attrs.get("agno.agent.id")
+                                      or attrs.get("agno.team.id") else ""),
+            "tc_session_id": (attrs.get("tracectrl.session_id")
+                              or attrs.get("session.id")
+                              or ""),
             "tc_caller_agent_id": attrs.get("tracectrl.caller.agent_id", ""),
             "tc_input_source": attrs.get("tracectrl.input.source", ""),
             "tc_tool_category": attrs.get("tracectrl.tool.category", ""),
