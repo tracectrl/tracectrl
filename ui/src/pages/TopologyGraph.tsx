@@ -4,6 +4,7 @@ import SidebarPanel from '../components/SidebarPanel'
 import PhaseReplaySlider from '../components/PhaseReplaySlider'
 import { fetchTopologyGraph, TopologyGraph, TopologyNode } from '../api/client'
 import { fetchLatestSpans, SpanDetail } from '../api/sessions'
+import { fetchAgentRisks, AgentRisk } from '../api/risk'
 import { usePhaseInference } from '../hooks/usePhaseInference'
 import { useProject } from '../context/ProjectContext'
 
@@ -15,6 +16,8 @@ export default function TopologyGraphPage() {
   const [loading, setLoading] = useState(true)
   const [latestSpans, setLatestSpans] = useState<SpanDetail[]>([])
   const [showPhases, setShowPhases] = useState(false)
+  const [showAttackerView, setShowAttackerView] = useState(false)
+  const [agentRisks, setAgentRisks] = useState<AgentRisk[]>([])
   const [replayNs, setReplayNs] = useState<number | null>(null)
 
   useEffect(() => {
@@ -25,6 +28,7 @@ export default function TopologyGraphPage() {
       .finally(() => setLoading(false))
 
     fetchLatestSpans(selectedProject).then(setLatestSpans).catch(() => {})
+    fetchAgentRisks(selectedProject).then(setAgentRisks).catch(() => {})
   }, [selectedProject])
 
   const handleNodeSelect = useCallback((node: TopologyNode | null) => {
@@ -92,6 +96,14 @@ export default function TopologyGraphPage() {
             </button>
           )}
           {!loading && graph && (
+            <button
+              className={`phase-toggle${showAttackerView ? ' active' : ''}`}
+              onClick={() => setShowAttackerView(v => !v)}
+            >
+              {showAttackerView ? 'Attacker View' : 'Developer View'}
+            </button>
+          )}
+          {!loading && graph && (
             <div className="live-indicator">Live</div>
           )}
         </div>
@@ -105,6 +117,8 @@ export default function TopologyGraphPage() {
         highlightedNodeIds={highlightedNodeIds}
         phaseGroups={phases}
         showPhases={showPhases}
+        attackerView={showAttackerView}
+        agentRisks={agentRisks}
       />
 
       {latestSpans.length > 0 && traceDurationNs > 0 && (

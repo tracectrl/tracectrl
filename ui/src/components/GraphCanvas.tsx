@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import cytoscape, { Core } from 'cytoscape'
 import dagre from 'cytoscape-dagre'
 import { TopologyGraph, TopologyNode } from '../api/client'
+import { AgentRisk } from '../api/risk'
 import { PhaseGroup } from '../hooks/usePhaseInference'
 
 cytoscape.use(dagre)
@@ -20,9 +21,11 @@ interface GraphCanvasProps {
   highlightedNodeIds?: Set<string>
   phaseGroups?: PhaseGroup[]
   showPhases?: boolean
+  attackerView?: boolean
+  agentRisks?: AgentRisk[]
 }
 
-export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases }: GraphCanvasProps) {
+export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
   const onNodeSelectRef = useRef(onNodeSelect)
@@ -265,6 +268,53 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
     }
     cy.endBatch()
   }, [highlightedNodeIds])
+
+  // Attacker view effect — highlights nodes by risk severity
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+
+    cy.startBatch()
+    if (attackerView && agentRisks && agentRisks.length > 0) {
+      const riskMap = new Map<string, string>()
+      for (const r of agentRisks) {
+        riskMap.set(r.agent_id, r.severity)
+      }
+
+      const colorMap: Record<string, string> = {
+        critical: '#FF4D4D',
+        high: '#FF6B35',
+        medium: '#FFBB00',
+        low: '#22C55E',
+      }
+
+      cy.nodes().forEach((node) => {
+        const nodeId = node.data('id') as string
+        const nodeLabel = node.data('label') as string
+        const severity =
+          riskMap.get(nodeId) ||
+          riskMap.get(nodeLabel?.toLowerCase().replace(/\s+/g, '-'))
+        if (severity) {
+          const color = colorMap[severity.toLowerCase()] || '#22C55E'
+          node.style('border-color', color)
+          node.style('border-width', 3)
+        }
+      })
+    } else {
+      // Reset to default border styles
+      cy.nodes().forEach((node) => {
+        const nodeType = node.data('nodeType') as string
+        if (nodeType === 'agent') {
+          node.style('border-color', 'rgba(74, 144, 217, 0.3)')
+          node.style('border-width', 2)
+        } else if (nodeType === 'tool') {
+          node.style('border-color', 'rgba(34, 197, 94, 0.3)')
+          node.style('border-width', 1)
+        }
+      })
+    }
+    cy.endBatch()
+  }, [attackerView, agentRisks])
 
   // Recalculate phase boxes when showPhases or phaseGroups change
   useEffect(() => {

@@ -8,6 +8,16 @@ Built by [CloudsineAI](https://cloudsine.ai).
 
 ---
 
+## Features
+
+- **TAGAAI Attack Graph Engine** — Automated vulnerability detection with 3 built-in rules: prompt injection (ASI-01), excessive agency (ASI-02), and data leakage (ASI-01 + ASI-02). Risk scores use a CVSS-based formula combining base severity, exploitability, and blast radius.
+- **MCP Proxy Server** — Transparent proxy for IDE agent tracing (Cursor, Claude Code). Captures every tool call made through MCP-compatible agents without code changes.
+- **Full Span Schema** — Security-enriched OpenTelemetry spans with `input.source` classification (`user`, `agent`, `external`, `memory`), memory write provenance, and span sequencing.
+- **5 Dashboard Pages** — Topology (developer + attacker view), Sessions (trace explorer), Agents (inventory), Risk Dashboard (system-level scoring), and Attack Paths (ranked vulnerability chains).
+- **5 Framework Instrumentors** — LangChain, CrewAI, Agno, Google ADK, AWS Strands — each requiring only 3 lines of code.
+
+---
+
 ## Architecture
 
 ```
@@ -39,14 +49,16 @@ Built by [CloudsineAI](https://cloudsine.ai).
                                           │  Pipeline every 60s:  │
                                           │  spans → inventory    │
                                           │       → topology      │
+                                          │       → attack graph  │
+                                          │       → risk scoring  │
                                           │       → watermark     │
                                           └───────────┬───────────┘
                                                       │
                                           ┌───────────▼───────────┐
                                           │  TraceCtrl Dashboard  │
                                           │  :3000 (React)        │
-                                          │  Topology graph       │
-                                          │  Agent inventory      │
+                                          │  Topology, Sessions   │
+                                          │  Agents, Risk, Attacks│
                                           └───────────────────────┘
 ```
 
@@ -110,7 +122,7 @@ In dev mode:
 | ClickHouse | `9000` (native), `8123` (HTTP) | Span storage, agent inventory, topology |
 | OTel Collector | `4317` (gRPC), `4318` (HTTP) | Receives spans from SDK, exports to ClickHouse |
 | TraceCtrl Engine | `8000` | REST API, pipeline scheduler |
-| TraceCtrl Dashboard | `3000` | Topology graph, agent inventory |
+| TraceCtrl Dashboard | `3000` | Topology, Sessions, Agents, Risk, Attack Paths |
 
 ---
 
@@ -290,20 +302,27 @@ docker exec -it $(docker compose ps -q clickhouse) clickhouse-client \
 curl http://localhost:8000/api/v1/topology/graph | python -m json.tool
 
 # Agent inventory list
-curl http://localhost:8000/api/v1/risk/agents | python -m json.tool
+curl http://localhost:8000/api/v1/agents | python -m json.tool
 
-# Specific agent detail
-curl http://localhost:8000/api/v1/topology/agents/<agent_id> | python -m json.tool
+# Risk summary (system-level score)
+curl http://localhost:8000/api/v1/risk/summary | python -m json.tool
+
+# Attack paths (ranked vulnerability chains)
+curl http://localhost:8000/api/v1/risk/attack-paths | python -m json.tool
+
+# Per-agent risk scores
+curl http://localhost:8000/api/v1/risk/agent-scores | python -m json.tool
 ```
 
 ### 5. View the Dashboard
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-- **Topology** — Interactive graph showing agents (jade circles), tools (gray rectangles), and their connections. Click any node for details.
-- **Sessions** — _(Sprint 2)_ Trace explorer with full span trees
-- **Risk Dashboard** — _(Sprint 2)_ CISO risk view with TAGAAI scoring
-- **Attack Paths** — _(Sprint 2)_ Ranked exploitation chains
+- **Topology Graph** — Interactive agent/tool graph with dagre layout. Toggle between developer view (data flow) and attacker view (attack surface overlay with risk-colored edges).
+- **Sessions** — Trace explorer with sortable session list, inline span tree expansion, and waterfall timeline with phase overlay and replay scrubber.
+- **Agents** — Agent inventory with expandable tool details showing call counts, error rates, and tool categories.
+- **Risk Dashboard** — System-level risk score, per-agent risk table with CVSS-based scoring, and risk trend indicators.
+- **Attack Paths** — Ranked vulnerability chains with step-by-step expansion showing the rule, affected agents, and blast radius.
 
 ---
 
@@ -374,6 +393,22 @@ extract_trace_headers(request.headers)
 
 ---
 
+## MCP Proxy Server
+
+The MCP proxy transparently intercepts tool calls from IDE agents (Cursor, Claude Code) and emits OpenTelemetry spans to TraceCtrl. No changes to your agent or MCP server configuration required — just insert the proxy in front of your downstream servers.
+
+```bash
+# Install
+pip install -e ./sdk/tracectrl-mcp
+
+# Run — list the downstream MCP servers to proxy
+TRACECTRL_DOWNSTREAM=filesystem,github tracectrl-mcp
+```
+
+The proxy captures tool call names, arguments, latency, and results as spans with full `input.source` classification, then forwards every call to the real downstream server unchanged.
+
+---
+
 ## Engine API Reference
 
 All endpoints are prefixed with `/api/v1`.
@@ -383,8 +418,14 @@ All endpoints are prefixed with `/api/v1`.
 | `GET` | `/health` | Health check — returns `{"status": "ok"}` |
 | `GET` | `/topology/graph` | Full topology graph: `{nodes: [...], edges: [...]}` |
 | `GET` | `/topology/agents/{agent_id}` | Single agent detail |
+| `GET` | `/sessions` | Session list with trace metadata |
+| `GET` | `/sessions/{trace_id}/spans` | All spans for a trace (span tree) |
+| `GET` | `/agents` | Agent inventory with tools, maturity, observation counts |
+| `GET` | `/agents/{id}/tools` | Tools for a specific agent with call counts and error rates |
 | `GET` | `/risk/agents` | All agents with maturity and observation counts |
-| `GET` | `/sessions` | Session list _(stub — returns `[]` until Sprint 2)_ |
+| `GET` | `/risk/summary` | System-level risk score and aggregate metrics |
+| `GET` | `/risk/attack-paths` | Ranked attack paths with step details and blast radius |
+| `GET` | `/risk/agent-scores` | Per-agent CVSS-based risk scores |
 
 ### Pipeline
 
@@ -393,7 +434,9 @@ The engine runs a background pipeline every `PIPELINE_INTERVAL_SECONDS` (default
 1. **Fetch** — Read new spans from `otel_traces` since the last watermark
 2. **Inventory** — Upsert agent records with cumulative observation counts
 3. **Topology** — Upsert agent-to-agent and agent-to-tool edges
-4. **Watermark** — Advance the watermark timestamp (only on success)
+4. **Attack Graph** — Run TAGAAI rules (prompt injection, excessive agency, data leakage) and build vulnerability chains
+5. **Risk Scoring** — Compute per-agent and system-level risk scores using CVSS-based formula
+6. **Watermark** — Advance the watermark timestamp (only on success)
 
 The watermark is **not advanced** on empty results or failures, ensuring no data is skipped.
 
@@ -536,7 +579,7 @@ SELECT * FROM tracectrl.agent_inventory FINAL
 
 ## Roadmap
 
-### Sprint 1 (Current) — End-to-End Skeleton
+### Sprint 1 — End-to-End Skeleton
 - [x] Python SDK with 5 framework instrumentors
 - [x] OTel Collector → ClickHouse pipeline
 - [x] Intelligence Engine with agent inventory and topology
@@ -544,13 +587,13 @@ SELECT * FROM tracectrl.agent_inventory FINAL
 - [x] Docker Compose one-command setup
 - [x] TUI first-time wizard
 
-### Sprint 2 — Risk Engine & Attack Graphs
-- [ ] TAGAAI attack graph engine (Python + NetworkX)
-- [ ] 3 core detection rules: prompt injection, excessive agency, data leakage
-- [ ] Risk scoring (agent risk + attack path risk)
-- [ ] MCP proxy server for IDE tool call monitoring
-- [ ] All 4 dashboard pages with real data
-- [ ] Attacker view toggle on topology canvas
+### Sprint 2 (Current) — Risk Engine & Attack Graphs
+- [x] TAGAAI attack graph engine with 3 detection rules (prompt injection ASI-01, excessive agency ASI-02, data leakage ASI-01+ASI-02)
+- [x] CVSS-based risk scoring (per-agent and system-level)
+- [x] MCP proxy server for IDE agent tracing (Cursor, Claude Code)
+- [x] Full span schema with `input.source` classification (user/agent/external/memory)
+- [x] 5 dashboard pages: Topology (with attacker view toggle), Sessions, Agents, Risk Dashboard, Attack Paths
+- [x] Risk and attack path API endpoints
 
 ### Sprint 3 — Validation & Polish
 - [ ] Integration test harnesses for 5 TAGAAI attack scenarios

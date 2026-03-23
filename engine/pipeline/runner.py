@@ -6,6 +6,7 @@ from engine.db.spans import fetch_new_spans
 from engine.db.inventory import update_agent_inventory
 from engine.db.topology import update_topology
 from engine.db.pipeline_state import get_watermark, set_watermark
+from engine.pipeline.attack_graph_runner import run_attack_graph
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ def run_pipeline():
 
         update_agent_inventory(spans)
         update_topology(spans)
+        run_attack_graph()
 
         set_watermark(datetime.utcnow())
         logger.info(f"Pipeline run complete. Processed {len(spans)} spans.")

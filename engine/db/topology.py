@@ -240,7 +240,8 @@ def _get_agent_ids_for_service(service: str) -> set[str]:
         """SELECT DISTINCT
                SpanAttributes['tracectrl.agent.id'] AS tc_id,
                SpanAttributes['agno.agent.id'] AS agno_id,
-               SpanAttributes['agent.name'] AS agent_name
+               SpanAttributes['agent.name'] AS agent_name,
+               SpanName
            FROM otel_traces
            WHERE ServiceName = %(service)s
              AND SpanAttributes['openinference.span.kind'] = 'AGENT'""",
@@ -248,8 +249,19 @@ def _get_agent_ids_for_service(service: str) -> set[str]:
     )
     ids = set()
     for row in rows:
-        tc_id, agno_id, agent_name = row[0], row[1], row[2]
-        agent_id = tc_id or agno_id or (agent_name.lower().replace(" ", "-") if agent_name else "")
+        tc_id, agno_id, agent_name, span_name = row[0], row[1], row[2], row[3]
+        agent_id = tc_id or agno_id
+        if not agent_id:
+            name = agent_name
+            if not name and span_name:
+                if span_name.startswith("invoke_agent "):
+                    name = span_name.replace("invoke_agent ", "")
+                elif span_name.endswith(".run"):
+                    name = span_name.replace(".run", "").replace("_", " ")
+                else:
+                    name = span_name
+            if name:
+                agent_id = name.lower().replace(" ", "-")
         if agent_id:
             ids.add(agent_id)
     return ids

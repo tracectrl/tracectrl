@@ -81,4 +81,24 @@ def fetch_new_spans(since: datetime) -> list[dict]:
             "tc_span_sequence": int(attrs.get("tracectrl.span_sequence", "0") or "0"),
         })
 
+    # Post-process: derive agent identity from SpanName for frameworks
+    # that don't set agent.name (e.g. Strands: "invoke_agent Foo")
+    for span in spans:
+        if span["oi_span_kind"] == "AGENT" and not span["tc_agent_id"]:
+            name = span["span_name"]
+            if name.startswith("invoke_agent "):
+                agent_name = name.replace("invoke_agent ", "")
+            elif name.endswith(".run"):
+                agent_name = name.replace(".run", "").replace("_", " ")
+            else:
+                agent_name = name
+            span["tc_agent_name"] = span["tc_agent_name"] or agent_name
+            span["tc_agent_id"] = agent_name.lower().replace(" ", "-")
+            # Detect framework from span naming pattern
+            if not span["tc_agent_framework"]:
+                if "invoke_agent" in name:
+                    span["tc_agent_framework"] = "strands"
+                elif ".run" in name:
+                    span["tc_agent_framework"] = "agno"
+
     return spans
