@@ -29,6 +29,7 @@ export default function PhaseReplaySlider({ traceStartNs, traceDurationNs, curre
         max={1000}
         value={sliderValue}
         onChange={handleChange}
+        aria-label="Replay timeline position"
       />
       <span className="replay-slider-time">{formatDuration(currentNs - traceStartNs)}</span>
       <button className="btn btn-ghost btn-sm" onClick={onClear}>Reset</button>

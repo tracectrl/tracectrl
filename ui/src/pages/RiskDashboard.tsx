@@ -15,6 +15,8 @@ export default function RiskDashboard() {
   const [sortKey, setSortKey] = useState<SortKey>('risk_score')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
+  useEffect(() => { document.title = 'Risk Dashboard — TraceCtrl' }, [])
+
   useEffect(() => {
     setLoading(true)
     Promise.all([fetchRiskSummary(), fetchAgentRisks(selectedProject)])
@@ -51,7 +53,7 @@ export default function RiskDashboard() {
       <div className="page-header">
         <div className="section-tag">Security</div>
         <h2>Risk Dashboard</h2>
-        <p className="page-meta">
+        <p className="page-meta" aria-live="polite">
           {loading
             ? 'Calculating risk...'
             : summary
@@ -60,7 +62,14 @@ export default function RiskDashboard() {
         </p>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); setLoading(true); Promise.all([fetchRiskSummary(), fetchAgentRisks(selectedProject)]).then(([s, a]) => { setSummary(s); setAgentRisks(a) }).catch(err => setError(err.message)).finally(() => setLoading(false)); }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <>
@@ -132,16 +141,16 @@ export default function RiskDashboard() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th onClick={() => toggleSort('agent_id')} style={{ cursor: 'pointer' }}>
+                      <th onClick={() => toggleSort('agent_id')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'agent_id' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                         Agent ID{sortIndicator('agent_id')}
                       </th>
-                      <th onClick={() => toggleSort('risk_score')} style={{ cursor: 'pointer' }}>
+                      <th onClick={() => toggleSort('risk_score')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'risk_score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                         Risk Score{sortIndicator('risk_score')}
                       </th>
-                      <th onClick={() => toggleSort('severity')} style={{ cursor: 'pointer' }}>
+                      <th onClick={() => toggleSort('severity')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'severity' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                         Severity{sortIndicator('severity')}
                       </th>
-                      <th onClick={() => toggleSort('path_count')} style={{ cursor: 'pointer' }}>
+                      <th onClick={() => toggleSort('path_count')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'path_count' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                         Paths{sortIndicator('path_count')}
                       </th>
                       <th>Top Rule</th>

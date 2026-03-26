@@ -322,7 +322,13 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
   }, [recalcPhaseBoxes])
 
   return (
-    <div className="graph-canvas-wrapper">
+    <div className="graph-canvas-wrapper" role="img" aria-label={`Agent topology graph with ${data?.nodes.length ?? 0} nodes and ${data?.edges.length ?? 0} edges`}>
+      <div className="sr-only">
+        Topology graph: {data?.nodes.filter(n => n.type === 'agent').length ?? 0} agents,{' '}
+        {data?.nodes.filter(n => n.type === 'tool').length ?? 0} tools,{' '}
+        {data?.edges.length ?? 0} connections.{' '}
+        {data?.nodes.filter(n => n.type === 'agent').map(n => n.label).join(', ')}
+      </div>
       <div ref={containerRef} className="graph-canvas" />
       {/* Phase group boxes */}
       {showPhases && phaseBoxes.map((box) => (

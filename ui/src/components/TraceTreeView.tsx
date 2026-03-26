@@ -124,8 +124,10 @@ export default function TraceTreeView({ spans, selectedSpanId, onSpanSelect }: T
               <button
                 className="trace-tree-chevron"
                 onClick={e => { e.stopPropagation(); toggleCollapse(node.span_id) }}
+                aria-expanded={!isCollapsed}
+                aria-label="Toggle children"
               >
-                {isCollapsed ? '\u25B8' : '\u25BE'}
+                {isCollapsed ? '\u25B6' : '\u25BC'}
               </button>
             )}
           </div>

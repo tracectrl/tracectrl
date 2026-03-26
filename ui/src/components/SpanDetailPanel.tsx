@@ -47,7 +47,7 @@ export default function SpanDetailPanel({ span, onClose, inline }: SpanDetailPan
       <div className="detail-panel-header">
         <h3 title={span.span_name}>{span.span_name}</h3>
         <button className="detail-panel-close" onClick={onClose}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M1 1l12 12M13 1L1 13" />
           </svg>
         </button>

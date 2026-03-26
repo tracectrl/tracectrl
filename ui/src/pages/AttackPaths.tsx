@@ -13,6 +13,8 @@ export default function AttackPaths() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [expandedPathId, setExpandedPathId] = useState<string | null>(null)
 
+  useEffect(() => { document.title = 'Attack Paths — TraceCtrl' }, [])
+
   useEffect(() => {
     setLoading(true)
     fetchAttackPaths(selectedProject)
@@ -52,14 +54,21 @@ export default function AttackPaths() {
       <div className="page-header">
         <div className="section-tag">Security</div>
         <h2>Attack Paths</h2>
-        <p className="page-meta">
+        <p className="page-meta" aria-live="polite">
           {loading
             ? 'Loading attack paths...'
             : `${paths.length} paths`}
         </p>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); setLoading(true); fetchAttackPaths(selectedProject).then(setPaths).catch(err => setError(err.message)).finally(() => setLoading(false)); }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="table-container">
@@ -84,14 +93,14 @@ export default function AttackPaths() {
               <thead>
                 <tr>
                   <th style={{ width: 28 }} />
-                  <th onClick={() => toggleSort('risk_score')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('risk_score')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'risk_score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Risk Score{sortIndicator('risk_score')}
                   </th>
                   <th>Severity</th>
-                  <th onClick={() => toggleSort('owasp_category')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('owasp_category')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'owasp_category' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     OWASP Category{sortIndicator('owasp_category')}
                   </th>
-                  <th onClick={() => toggleSort('rule_name')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('rule_name')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'rule_name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Rule Name{sortIndicator('rule_name')}
                   </th>
                   <th>Agents Involved</th>
@@ -107,6 +116,7 @@ export default function AttackPaths() {
                         onClick={() => handleRowClick(path.path_id)}
                         style={{ cursor: 'pointer' }}
                         className={isExpanded ? 'selected' : ''}
+                        aria-expanded={isExpanded}
                       >
                         <td style={{ width: 28, textAlign: 'center', color: 'var(--gray-500)', fontSize: 10 }}>
                           {isExpanded ? '\u25BC' : '\u25B6'}

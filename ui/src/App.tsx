@@ -76,8 +76,9 @@ function App() {
     <BrowserRouter>
       <ProjectProvider>
         <div className="layout">
+          <a href="#main-content" className="sr-only">Skip to main content</a>
           <Sidebar />
-          <main className="main-content">
+          <main id="main-content" className="main-content">
             <Routes>
               <Route path="/" element={<Navigate to="/topology" replace />} />
               <Route path="/topology" element={<TopologyGraph />} />
