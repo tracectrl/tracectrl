@@ -1,7 +1,6 @@
 """Attack graph persistence — attack_paths, agent_risk_scores, system_risk."""
 
 import json
-import hashlib
 from datetime import datetime
 from engine.db.client import execute
 

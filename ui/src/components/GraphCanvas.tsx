@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import cytoscape, { Core } from 'cytoscape'
 import dagre from 'cytoscape-dagre'
 import { TopologyGraph, TopologyNode } from '../api/client'
@@ -6,14 +6,6 @@ import { AgentRisk } from '../api/risk'
 import { PhaseGroup } from '../hooks/usePhaseInference'
 
 cytoscape.use(dagre)
-
-interface PhaseBox {
-  phaseIndex: number
-  x: number
-  y: number
-  w: number
-  h: number
-}
 
 interface GraphCanvasProps {
   data: TopologyGraph | null
@@ -25,62 +17,101 @@ interface GraphCanvasProps {
   agentRisks?: AgentRisk[]
 }
 
-export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks }: GraphCanvasProps) {
+/**
+ * Build Cytoscape elements. When showPhases is true, creates compound parent
+ * nodes for each phase and adds "then" edges between consecutive phases.
+ * This makes dagre treat phases as grouped tiers in a vertical tree.
+ */
+function buildElements(
+  data: TopologyGraph,
+  phaseGroups: PhaseGroup[] | undefined,
+  showPhases: boolean,
+): cytoscape.ElementDefinition[] {
+  const elements: cytoscape.ElementDefinition[] = []
+
+  // Build a lookup: agent node ID → phase index (for parenting)
+  const agentToPhase = new Map<string, number>()
+  if (showPhases && phaseGroups && phaseGroups.length > 0) {
+    for (const phase of phaseGroups) {
+      for (const agentId of phase.agentIds) {
+        agentToPhase.set(agentId, phase.phaseIndex)
+      }
+    }
+
+    // Add compound parent nodes for each phase
+    for (const phase of phaseGroups) {
+      elements.push({
+        data: {
+          id: `__phase_${phase.phaseIndex}`,
+          label: `Phase ${phase.phaseIndex + 1}`,
+          nodeType: 'phase',
+        },
+      })
+    }
+
+    // Add "then" edges between consecutive phase compound nodes
+    for (let i = 0; i < phaseGroups.length - 1; i++) {
+      elements.push({
+        data: {
+          id: `__phase_edge_${i}`,
+          source: `__phase_${i}`,
+          target: `__phase_${i + 1}`,
+          edgeType: 'phase_flow',
+          edgeLabel: 'then',
+        },
+      })
+    }
+  }
+
+  // Add regular nodes — parent them to phase compounds when active
+  for (const n of data.nodes) {
+    const parentPhase = agentToPhase.get(n.id)
+      ?? agentToPhase.get(n.label.toLowerCase().replace(/\s+/g, '-'))
+    const parentId = (showPhases && parentPhase !== undefined)
+      ? `__phase_${parentPhase}`
+      : undefined
+
+    elements.push({
+      data: {
+        id: n.id,
+        label: n.label,
+        nodeType: n.type,
+        meta: n.metadata,
+        ...(parentId ? { parent: parentId } : {}),
+      },
+    })
+  }
+
+  // Add regular edges
+  for (const e of data.edges) {
+    elements.push({
+      data: {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        edgeType: e.type,
+        edgeLabel: e.type === 'agent_to_tool'
+          ? 'uses'
+          : (e.channel === 'team_member' ? 'delegates' : 'calls'),
+        callCount: e.call_count,
+        channel: e.channel,
+      },
+    })
+  }
+
+  return elements
+}
+
+export default function GraphCanvas({
+  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks,
+}: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
   const onNodeSelectRef = useRef(onNodeSelect)
   onNodeSelectRef.current = onNodeSelect
 
-  const [phaseBoxes, setPhaseBoxes] = useState<PhaseBox[]>([])
-
-  const recalcPhaseBoxes = useCallback(() => {
-    const cy = cyRef.current
-    if (!cy || !phaseGroups || !showPhases) {
-      setPhaseBoxes([])
-      return
-    }
-
-    const boxes: PhaseBox[] = []
-    for (const phase of phaseGroups) {
-      const matchingNodes: cytoscape.NodeSingular[] = []
-      cy.nodes().forEach((node) => {
-        const nodeId = node.data('id') as string
-        const nodeLabel = node.data('label') as string
-        if (
-          phase.agentIds.includes(nodeId) ||
-          phase.agentIds.includes(nodeLabel?.toLowerCase().replace(/\s+/g, '-'))
-        ) {
-          matchingNodes.push(node)
-        }
-      })
-
-      if (matchingNodes.length === 0) continue
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-      for (const node of matchingNodes) {
-        const bb = node.renderedBoundingBox()
-        if (bb.x1 < minX) minX = bb.x1
-        if (bb.y1 < minY) minY = bb.y1
-        if (bb.x2 > maxX) maxX = bb.x2
-        if (bb.y2 > maxY) maxY = bb.y2
-      }
-
-      const pad = 20
-      boxes.push({
-        phaseIndex: phase.phaseIndex,
-        x: minX - pad,
-        y: minY - pad,
-        w: maxX - minX + pad * 2,
-        h: maxY - minY + pad * 2,
-      })
-    }
-    setPhaseBoxes(boxes)
-  }, [phaseGroups, showPhases])
-
-  const recalcRef = useRef(recalcPhaseBoxes)
-  recalcRef.current = recalcPhaseBoxes
-
-  // Layout effect — only re-runs when graph data changes
+  // Rebuild the graph when data OR showPhases changes
+  // (showPhases changes the element structure — compound nodes)
   useEffect(() => {
     if (!containerRef.current || !data || data.nodes.length === 0) return
 
@@ -89,27 +120,33 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
       cyRef.current = null
     }
 
-    const elements: cytoscape.ElementDefinition[] = [
-      ...data.nodes.map(n => ({
-        data: { id: n.id, label: n.label, nodeType: n.type, meta: n.metadata },
-      })),
-      ...data.edges.map(e => ({
-        data: {
-          id: e.id,
-          source: e.source,
-          target: e.target,
-          edgeType: e.type,
-          edgeLabel: e.type === 'agent_to_tool' ? 'uses' : (e.channel === 'team_member' ? 'delegates' : 'calls'),
-          callCount: e.call_count,
-          channel: e.channel,
-        },
-      })),
-    ]
+    const elements = buildElements(data, phaseGroups, !!showPhases)
 
     cyRef.current = cytoscape({
       container: containerRef.current,
       elements,
       style: [
+        // Phase compound nodes — subtle container
+        {
+          selector: 'node[nodeType="phase"]',
+          style: {
+            'background-color': 'rgba(64, 112, 108, 0.08)',
+            'background-opacity': 1,
+            'border-width': 1.5,
+            'border-color': 'rgba(64, 112, 108, 0.4)',
+            'border-style': 'solid',
+            'shape': 'round-rectangle',
+            'padding': '24px',
+            'label': 'data(label)',
+            'color': '#8BC4BF',
+            'font-size': '11px',
+            'font-weight': 700,
+            'font-family': "'JetBrains Mono', monospace",
+            'text-valign': 'top',
+            'text-halign': 'center',
+            'text-margin-y': -4,
+          },
+        },
         // Agent nodes — blue rounded rectangles
         {
           selector: 'node[nodeType="agent"]',
@@ -154,42 +191,75 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
             'border-color': 'rgba(34, 197, 94, 0.3)',
           },
         },
-        // Agent-to-agent edges — solid line
+        // Phase flow edges — bright, visible "then" arrows
+        {
+          selector: 'edge[edgeType="phase_flow"]',
+          style: {
+            'line-color': '#8BC4BF',
+            'target-arrow-color': '#8BC4BF',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier',
+            'line-style': 'dashed',
+            'line-dash-pattern': [8, 5],
+            'width': 2.5,
+            'opacity': 0.9,
+            'label': 'data(edgeLabel)',
+            'font-size': '11px',
+            'font-weight': 600,
+            'font-family': "'JetBrains Mono', monospace",
+            'color': '#8BC4BF',
+            'text-rotation': 'autorotate',
+            'text-margin-y': -12,
+            'text-background-color': '#0A0A0A',
+            'text-background-opacity': 0.85,
+            'text-background-padding': '4px',
+            'text-background-shape': 'roundrectangle' as any,
+          },
+        },
+        // Agent-to-agent edges — solid, visible
         {
           selector: 'edge[edgeType="agent_to_agent"]',
           style: {
-            'line-color': '#8A8A8A',
-            'target-arrow-color': '#8A8A8A',
+            'line-color': '#AAAAAA',
+            'target-arrow-color': '#AAAAAA',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
             'width': 2,
-            'opacity': 0.7,
+            'opacity': 0.8,
             'label': 'data(edgeLabel)',
             'font-size': '10px',
             'font-family': "'Poppins', sans-serif",
-            'color': '#6B6B6B',
+            'color': '#AAAAAA',
             'text-rotation': 'autorotate',
             'text-margin-y': -10,
+            'text-background-color': '#0A0A0A',
+            'text-background-opacity': 0.8,
+            'text-background-padding': '3px',
+            'text-background-shape': 'roundrectangle' as any,
           },
         },
-        // Agent-to-tool edges — dashed line
+        // Agent-to-tool edges — dashed, white arrows
         {
           selector: 'edge[edgeType="agent_to_tool"]',
           style: {
-            'line-color': '#3A3A3A',
-            'target-arrow-color': '#3A3A3A',
+            'line-color': '#CCCCCC',
+            'target-arrow-color': '#CCCCCC',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
             'line-style': 'dashed',
             'line-dash-pattern': [6, 4],
             'width': 1.5,
-            'opacity': 0.5,
+            'opacity': 0.7,
             'label': 'data(edgeLabel)',
             'font-size': '10px',
             'font-family': "'Poppins', sans-serif",
-            'color': '#6B6B6B',
+            'color': '#CCCCCC',
             'text-rotation': 'autorotate',
             'text-margin-y': -10,
+            'text-background-color': '#0A0A0A',
+            'text-background-opacity': 0.8,
+            'text-background-padding': '3px',
+            'text-background-shape': 'roundrectangle' as any,
           },
         },
         // Selected state — red glow
@@ -205,20 +275,20 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
       layout: {
         name: 'dagre',
         rankDir: 'TB',
-        nodeSep: 60,
-        rankSep: 80,
+        nodeSep: 50,
+        rankSep: showPhases ? 60 : 80,
         animate: false,
         fit: true,
-        padding: 50,
+        padding: 40,
       } as any,
       minZoom: 0.3,
       maxZoom: 3,
     })
 
-    // Bind event listeners using ref for stable callback
     const currentData = data
     cyRef.current.on('tap', 'node', (evt) => {
       const nodeData = evt.target.data()
+      if (nodeData.nodeType === 'phase') return // Don't select phase containers
       const node = currentData.nodes.find(n => n.id === nodeData.id)
       onNodeSelectRef.current(node || null)
     })
@@ -229,18 +299,13 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
       }
     })
 
-    // Subscribe to render event to recalculate phase boxes on pan/zoom
-    cyRef.current.on('render', () => {
-      recalcRef.current()
-    })
-
     return () => {
       cyRef.current?.destroy()
       cyRef.current = null
     }
-  }, [data])
+  }, [data, showPhases, phaseGroups])
 
-  // Highlight effect — reacts to highlightedNodeIds changes
+  // Highlight effect
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
@@ -250,26 +315,26 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
       cy.nodes().forEach((node) => {
         const nodeId = node.data('id') as string
         const nodeLabel = node.data('label') as string
+        const nodeType = node.data('nodeType') as string
+        if (nodeType === 'phase') return
         const isHighlighted =
           highlightedNodeIds.has(nodeId) ||
           highlightedNodeIds.has(nodeLabel?.toLowerCase().replace(/\s+/g, '-'))
         node.style('opacity', isHighlighted ? 1.0 : 0.2)
       })
       cy.edges().forEach((edge) => {
-        edge.style('opacity', 0.2)
+        const edgeType = edge.data('edgeType') as string
+        if (edgeType === 'phase_flow') return
+        edge.style('opacity', 0.15)
       })
     } else {
-      cy.nodes().forEach((node) => {
-        node.style('opacity', 1.0)
-      })
-      cy.edges().forEach((edge) => {
-        edge.removeStyle('opacity')
-      })
+      cy.nodes().forEach((node) => { node.style('opacity', 1.0) })
+      cy.edges().forEach((edge) => { edge.removeStyle('opacity') })
     }
     cy.endBatch()
   }, [highlightedNodeIds])
 
-  // Attacker view effect — highlights nodes by risk severity
+  // Attacker view effect
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
@@ -277,31 +342,22 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
     cy.startBatch()
     if (attackerView && agentRisks && agentRisks.length > 0) {
       const riskMap = new Map<string, string>()
-      for (const r of agentRisks) {
-        riskMap.set(r.agent_id, r.severity)
-      }
+      for (const r of agentRisks) riskMap.set(r.agent_id, r.severity)
 
       const colorMap: Record<string, string> = {
-        critical: '#FF4D4D',
-        high: '#FF6B35',
-        medium: '#FFBB00',
-        low: '#22C55E',
+        critical: '#FF4D4D', high: '#FF6B35', medium: '#FFBB00', low: '#22C55E',
       }
 
       cy.nodes().forEach((node) => {
         const nodeId = node.data('id') as string
         const nodeLabel = node.data('label') as string
-        const severity =
-          riskMap.get(nodeId) ||
-          riskMap.get(nodeLabel?.toLowerCase().replace(/\s+/g, '-'))
+        const severity = riskMap.get(nodeId) || riskMap.get(nodeLabel?.toLowerCase().replace(/\s+/g, '-'))
         if (severity) {
-          const color = colorMap[severity.toLowerCase()] || '#22C55E'
-          node.style('border-color', color)
+          node.style('border-color', colorMap[severity.toLowerCase()] || '#22C55E')
           node.style('border-width', 3)
         }
       })
     } else {
-      // Reset to default border styles
       cy.nodes().forEach((node) => {
         const nodeType = node.data('nodeType') as string
         if (nodeType === 'agent') {
@@ -316,11 +372,6 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
     cy.endBatch()
   }, [attackerView, agentRisks])
 
-  // Recalculate phase boxes when showPhases or phaseGroups change
-  useEffect(() => {
-    recalcPhaseBoxes()
-  }, [recalcPhaseBoxes])
-
   return (
     <div className="graph-canvas-wrapper" role="img" aria-label={`Agent topology graph with ${data?.nodes.length ?? 0} nodes and ${data?.edges.length ?? 0} edges`}>
       <div className="sr-only">
@@ -330,60 +381,6 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
         {data?.nodes.filter(n => n.type === 'agent').map(n => n.label).join(', ')}
       </div>
       <div ref={containerRef} className="graph-canvas" />
-      {/* Phase group boxes */}
-      {showPhases && phaseBoxes.map((box) => (
-        <div
-          key={`phase-${box.phaseIndex}`}
-          className="phase-overlay-box"
-          style={{
-            left: box.x,
-            top: box.y,
-            width: box.w,
-            height: box.h,
-          }}
-        >
-          <div className="phase-overlay-label">Phase {box.phaseIndex + 1}</div>
-        </div>
-      ))}
-      {/* "then" arrows between consecutive phase boxes */}
-      {showPhases && phaseBoxes.length > 1 && (
-        <svg style={{
-          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-          pointerEvents: 'none', zIndex: 6,
-        }}>
-          <defs>
-            <marker id="phase-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-              <path d="M0,0 L8,3 L0,6" fill="none" stroke="#40706C" strokeWidth="1.5" />
-            </marker>
-          </defs>
-          {phaseBoxes.slice(0, -1).map((box, i) => {
-            const next = phaseBoxes[i + 1]
-            const x1 = box.x + box.w / 2
-            const y1 = box.y + box.h
-            const x2 = next.x + next.w / 2
-            const y2 = next.y
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
-            return (
-              <g key={`arrow-${i}`}>
-                <line
-                  x1={x1} y1={y1 + 4} x2={x2} y2={y2 - 4}
-                  stroke="#40706C" strokeWidth="1.5" strokeDasharray="6,4"
-                  markerEnd="url(#phase-arrow)" opacity="0.7"
-                />
-                <rect x={mx - 16} y={my - 8} width="32" height="16" rx="4"
-                  fill="#0A0A0A" stroke="#40706C" strokeWidth="0.5" opacity="0.9"
-                />
-                <text x={mx} y={my + 4} textAnchor="middle" fontSize="9"
-                  fontFamily="'JetBrains Mono', monospace" fill="#40706C" opacity="0.8"
-                >
-                  then
-                </text>
-              </g>
-            )
-          })}
-        </svg>
-      )}
       <div className="graph-legend">
         <div className="graph-legend-item">
           <span className="graph-legend-dot" style={{ background: '#4A90D9' }} />
@@ -406,7 +403,11 @@ export default function GraphCanvas({ data, onNodeSelect, highlightedNodeIds, ph
           <>
             <div className="graph-legend-divider" />
             <div className="graph-legend-item">
-              <span className="graph-legend-line graph-legend-line-dashed" style={{ background: 'repeating-linear-gradient(to right, #40706C 0px, #40706C 4px, transparent 4px, transparent 7px)' }} />
+              <span className="graph-legend-dot" style={{ background: 'rgba(64, 112, 108, 0.4)', border: '1px solid #8BC4BF' }} />
+              Phase
+            </div>
+            <div className="graph-legend-item">
+              <span className="graph-legend-line" style={{ background: 'repeating-linear-gradient(to right, #8BC4BF 0px, #8BC4BF 5px, transparent 5px, transparent 8px)' }} />
               then
             </div>
           </>

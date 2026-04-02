@@ -53,6 +53,8 @@ class TraceCtrlSpanProcessor(SpanProcessor):
                     agent_name = span_name.replace("invoke_agent ", "")
                 elif span_name.endswith(".run"):
                     agent_name = span_name.replace(".run", "").replace("_", " ")
+                elif span_name.endswith(".execute"):
+                    agent_name = span_name.replace(".execute", "").replace("_", " ")
                 elif span_name:
                     agent_name = span_name
             # Derive ID from name if no explicit ID
@@ -66,6 +68,8 @@ class TraceCtrlSpanProcessor(SpanProcessor):
             span_name_check = span.name if hasattr(span, "name") else ""
             if span_name_check.startswith("invoke_agent"):
                 _set(schema.TC_AGENT_FRAMEWORK, "strands")
+            elif span_name_check.startswith("openclaw."):
+                _set(schema.TC_AGENT_FRAMEWORK, "openclaw")
             elif attrs.get(_AGNO_AGENT_ID) or attrs.get(_AGNO_TEAM_ID):
                 _set(schema.TC_AGENT_FRAMEWORK, "agno")
             else:
@@ -77,11 +81,13 @@ class TraceCtrlSpanProcessor(SpanProcessor):
             if agno_session:
                 _set(schema.TC_SESSION_ID, agno_session)
 
-        # Tool category inference
+        # Tool category inference — keep result in local var since attrs is immutable snapshot
         tool_name = attrs.get(schema.TOOL_NAME, "")
         tool_desc = attrs.get(schema.TOOL_DESCRIPTION, "")
+        computed_tool_cat = ""
         if tool_name:
-            _set(schema.TC_TOOL_CATEGORY, infer_tool_category(tool_name, tool_desc))
+            computed_tool_cat = infer_tool_category(tool_name, tool_desc)
+            _set(schema.TC_TOOL_CATEGORY, computed_tool_cat)
 
         # System prompt hash (16 hex chars = 64-bit, balances collision resistance + storage)
         system_prompt = attrs.get(schema.LLM_SYSTEM, "")
@@ -97,16 +103,15 @@ class TraceCtrlSpanProcessor(SpanProcessor):
         # memory.operation — detect from span kind + tool category
         if oi_kind == "RETRIEVER":
             _set(schema.TC_MEMORY_OPERATION, "read")
-        elif tool_name and infer_tool_category(tool_name, tool_desc) == "memory_write":
+        elif computed_tool_cat == "memory_write":
             _set(schema.TC_MEMORY_OPERATION, "write")
 
         # input.source classification (full — Sprint 2)
         if not attrs.get(schema.TC_INPUT_SOURCE):
             caller_agent_id = attrs.get(schema.TC_CALLER_AGENT_ID, "")
-            tool_cat = attrs.get(schema.TC_TOOL_CATEGORY, "")
-            if tool_cat in ("external_api", "email"):
+            if computed_tool_cat in ("external_api", "email"):
                 _set(schema.TC_INPUT_SOURCE, "external")
-            elif tool_cat in ("memory_read",) or oi_kind == "RETRIEVER":
+            elif computed_tool_cat in ("memory_read",) or oi_kind == "RETRIEVER":
                 _set(schema.TC_INPUT_SOURCE, "memory")
             elif caller_agent_id:
                 _set(schema.TC_INPUT_SOURCE, "agent")

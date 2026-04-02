@@ -1,6 +1,6 @@
 """Base classes for TAGAAI attack graph rules."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

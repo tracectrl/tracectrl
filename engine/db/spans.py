@@ -79,26 +79,91 @@ def fetch_new_spans(since: datetime) -> list[dict]:
             "tc_memory_store_id": attrs.get("tracectrl.memory.store_id", ""),
             "tc_system_prompt_hash": attrs.get("tracectrl.system_prompt_hash", ""),
             "tc_span_sequence": int(attrs.get("tracectrl.span_sequence", "0") or "0"),
+            # OpenClaw-specific attributes — prefer namespaced keys over bare keys
+            # to avoid pollution from non-OpenClaw spans that use common attribute names
+            "_oc_channel": attrs.get("openclaw.channel", "") or attrs.get("channel", ""),
+            "_oc_provider": attrs.get("openclaw.provider", "") or attrs.get("provider", ""),
+            "_oc_model": attrs.get("openclaw.model", "") or attrs.get("model", ""),
+            "_oc_session_id": attrs.get("openclaw.sessionId", "") or attrs.get("sessionId", ""),
+            "_oc_outcome": attrs.get("openclaw.outcome", "") or attrs.get("outcome", ""),
+            "_oc_chat_id": attrs.get("openclaw.chatId", "") or attrs.get("chatId", ""),
         })
 
     # Post-process: derive agent identity from SpanName for frameworks
     # that don't set agent.name (e.g. Strands: "invoke_agent Foo")
     for span in spans:
-        if span["oi_span_kind"] == "AGENT" and not span["tc_agent_id"]:
+        is_agent_span = span["oi_span_kind"] == "AGENT"
+        # Also detect CHAIN spans with agent-like names (e.g. "payment_agent.execute")
+        is_agent_chain = (span["oi_span_kind"] == "CHAIN"
+                          and ".execute" in span["span_name"]
+                          and "_agent" in span["span_name"].lower())
+        if (is_agent_span or is_agent_chain) and not span["tc_agent_id"]:
             name = span["span_name"]
+            if is_agent_chain:
+                span["oi_span_kind"] = "AGENT"  # Promote to AGENT for pipeline
             if name.startswith("invoke_agent "):
                 agent_name = name.replace("invoke_agent ", "")
             elif name.endswith(".run"):
                 agent_name = name.replace(".run", "").replace("_", " ")
+            elif name.endswith(".execute"):
+                agent_name = name.replace(".execute", "").replace("_", " ")
             else:
                 agent_name = name
             span["tc_agent_name"] = span["tc_agent_name"] or agent_name
             span["tc_agent_id"] = agent_name.lower().replace(" ", "-")
             # Detect framework from span naming pattern
+            # Note: if agno.agent.id was present, tc_agent_framework was already
+            # set to "agno" during initial extraction (lines 68-70) and won't reach here
             if not span["tc_agent_framework"]:
                 if "invoke_agent" in name:
                     span["tc_agent_framework"] = "strands"
-                elif ".run" in name:
-                    span["tc_agent_framework"] = "agno"
+                else:
+                    span["tc_agent_framework"] = "unknown"
+
+    # Post-process: derive identity from OpenClaw gateway spans
+    # OpenClaw uses openclaw.* span names with custom attributes
+    for span in spans:
+        name = span["span_name"]
+        if not name.startswith("openclaw."):
+            continue
+
+        if name == "openclaw.model.usage":
+            span["oi_span_kind"] = "LLM"
+            span["llm_model_name"] = span["_oc_model"] or span["llm_model_name"]
+            span["tc_agent_framework"] = "openclaw"
+
+        elif name == "openclaw.message.processed":
+            span["oi_span_kind"] = "AGENT"
+            channel = span["_oc_channel"]
+            display_name = f"openclaw-{channel}" if channel else "openclaw-gateway"
+            span["tc_agent_name"] = display_name
+            span["tc_agent_id"] = display_name.lower().replace(" ", "-")
+            span["tc_agent_framework"] = "openclaw"
+
+        elif name == "openclaw.webhook.processed":
+            span["oi_span_kind"] = "TOOL"
+            channel = span["_oc_channel"]
+            span["tool_name"] = f"webhook:{channel}" if channel else "webhook_handler"
+            span["tc_tool_category"] = "external_api"
+            span["tc_agent_framework"] = "openclaw"
+
+        elif name == "openclaw.webhook.error":
+            span["oi_span_kind"] = "TOOL"
+            channel = span["_oc_channel"]
+            span["tool_name"] = f"webhook:{channel}" if channel else "webhook_handler"
+            span["status_code"] = "ERROR"
+            span["tc_tool_category"] = "external_api"
+            span["tc_agent_framework"] = "openclaw"
+
+        elif name == "openclaw.session.stuck":
+            span["oi_span_kind"] = "AGENT"
+            span["tc_agent_name"] = "openclaw-session-monitor"
+            span["tc_agent_id"] = "openclaw-session-monitor"
+            span["tc_agent_framework"] = "openclaw"
+            span["status_code"] = "ERROR"
+
+        # Session ID from OpenClaw
+        if not span["tc_session_id"]:
+            span["tc_session_id"] = span["_oc_session_id"]
 
     return spans

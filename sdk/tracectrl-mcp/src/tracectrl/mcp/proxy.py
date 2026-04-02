@@ -1,6 +1,5 @@
 """Transparent MCP tool call proxy with OTel span emission."""
 
-import os
 import logging
 from opentelemetry import trace
 from tracectrl import schema

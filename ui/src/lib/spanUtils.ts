@@ -20,6 +20,7 @@ export function typeBadgeClass(type: string): string {
   if (t === 'CHAIN') return 'badge badge-chain'
   if (t === 'RETRIEVER') return 'badge badge-retriever'
   if (t === 'EMBEDDING') return 'badge badge-embedding'
+  if (t === 'OPENCLAW') return 'badge badge-openclaw'
   return 'badge badge-default'
 }
 
@@ -30,6 +31,8 @@ export function durationFillClass(type: string): string {
   if (t === 'LLM') return 'duration-fill duration-fill-llm'
   if (t === 'CHAIN') return 'duration-fill duration-fill-chain'
   if (t === 'RETRIEVER') return 'duration-fill duration-fill-retriever'
+  if (t === 'EMBEDDING') return 'duration-fill duration-fill-embedding'
+  if (t === 'OPENCLAW') return 'duration-fill duration-fill-openclaw'
   return 'duration-fill duration-fill-default'
 }
 
@@ -41,6 +44,7 @@ export const SPAN_KIND_COLORS: Record<string, string> = {
   CHAIN: '#A78BFA',
   RETRIEVER: '#FF6B35',
   EMBEDDING: '#6B6B6B',
+  OPENCLAW: '#FF6B9D',
   INTERNAL: '#3A3A3A',
   DEFAULT: '#6B6B6B',
 }

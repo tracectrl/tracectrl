@@ -241,25 +241,38 @@ def _get_agent_ids_for_service(service: str) -> set[str]:
                SpanAttributes['tracectrl.agent.id'] AS tc_id,
                SpanAttributes['agno.agent.id'] AS agno_id,
                SpanAttributes['agent.name'] AS agent_name,
-               SpanName
+               SpanName,
+               SpanAttributes['channel'] AS oc_channel
            FROM otel_traces
            WHERE ServiceName = %(service)s
-             AND SpanAttributes['openinference.span.kind'] = 'AGENT'""",
+             AND (SpanAttributes['openinference.span.kind'] = 'AGENT'
+                  OR SpanName LIKE 'openclaw.%%'
+                  OR (SpanAttributes['openinference.span.kind'] = 'CHAIN'
+                      AND position(lower(SpanName), '_agent') > 0
+                      AND SpanName LIKE '%%.execute'))""",
         {"service": service},
     )
     ids = set()
     for row in rows:
         tc_id, agno_id, agent_name, span_name = row[0], row[1], row[2], row[3]
+        oc_channel = row[4] if len(row) > 4 else ""
         agent_id = tc_id or agno_id
         if not agent_id:
-            name = agent_name
-            if not name and span_name:
+            if span_name in ("openclaw.message.processed", "openclaw.session.stuck"):
+                name = f"openclaw-{oc_channel}" if oc_channel else "openclaw-gateway"
+            elif span_name.startswith("openclaw."):
+                name = ""  # LLM/TOOL openclaw spans don't own agent identity
+            elif not agent_name and span_name:
                 if span_name.startswith("invoke_agent "):
                     name = span_name.replace("invoke_agent ", "")
                 elif span_name.endswith(".run"):
                     name = span_name.replace(".run", "").replace("_", " ")
+                elif span_name.endswith(".execute") and "_agent" in span_name.lower():
+                    name = span_name.replace(".execute", "").replace("_", " ")
                 else:
-                    name = span_name
+                    name = ""  # Don't create agent IDs from unrecognized span names
+            else:
+                name = agent_name
             if name:
                 agent_id = name.lower().replace(" ", "-")
         if agent_id:

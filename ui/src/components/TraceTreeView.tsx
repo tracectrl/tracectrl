@@ -9,6 +9,7 @@ const SPAN_TYPE_EMOJI: Record<string, string> = {
   CHAIN: '🔗',
   RETRIEVER: '📥',
   EMBEDDING: '📊',
+  OPENCLAW: '🦞',
   INTERNAL: '⚙️',
 }
 
@@ -76,7 +77,10 @@ export default function TraceTreeView({ spans, selectedSpanId, onSpanSelect }: T
           <div
             key={node.span_id}
             className={`trace-tree-node${selectedSpanId === node.span_id ? ' selected' : ''}`}
+            role="button"
+            tabIndex={0}
             onClick={() => onSpanSelect(node)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSpanSelect(node) } }}
           >
             {/* Indentation connectors */}
             <div className="trace-tree-indent">

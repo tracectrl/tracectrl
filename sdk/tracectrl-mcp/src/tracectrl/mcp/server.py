@@ -2,11 +2,8 @@
 
 import os
 import sys
-import json
 import logging
 from tracectrl.config import configure
-from tracectrl.mcp.schema_scanner import scan_tool_schema
-from tracectrl.mcp.proxy import trace_tool_call
 
 logger = logging.getLogger(__name__)
 
