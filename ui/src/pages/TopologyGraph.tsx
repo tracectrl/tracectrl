@@ -4,6 +4,7 @@ import SidebarPanel from '../components/SidebarPanel'
 import PhaseReplaySlider from '../components/PhaseReplaySlider'
 import { fetchTopologyGraph, TopologyGraph, TopologyNode } from '../api/client'
 import { fetchLatestSpans, SpanDetail } from '../api/sessions'
+import { fetchAgentRisks, AgentRisk } from '../api/risk'
 import { usePhaseInference } from '../hooks/usePhaseInference'
 import { useProject } from '../context/ProjectContext'
 
@@ -15,7 +16,11 @@ export default function TopologyGraphPage() {
   const [loading, setLoading] = useState(true)
   const [latestSpans, setLatestSpans] = useState<SpanDetail[]>([])
   const [showPhases, setShowPhases] = useState(false)
+  const [showAttackerView, setShowAttackerView] = useState(false)
+  const [agentRisks, setAgentRisks] = useState<AgentRisk[]>([])
   const [replayNs, setReplayNs] = useState<number | null>(null)
+
+  useEffect(() => { document.title = 'Topology — TraceCtrl' }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -25,6 +30,7 @@ export default function TopologyGraphPage() {
       .finally(() => setLoading(false))
 
     fetchLatestSpans(selectedProject).then(setLatestSpans).catch(() => {})
+    fetchAgentRisks(selectedProject).then(setAgentRisks).catch(() => {})
   }, [selectedProject])
 
   const handleNodeSelect = useCallback((node: TopologyNode | null) => {
@@ -74,7 +80,7 @@ export default function TopologyGraphPage() {
         <div>
           <div className="section-tag">Topology</div>
           <h2>Agent Topology</h2>
-          <p className="page-meta">
+          <p className="page-meta" aria-live="polite">
             {loading
               ? 'Loading graph...'
               : graph
@@ -87,8 +93,18 @@ export default function TopologyGraphPage() {
             <button
               className={`phase-toggle${showPhases ? ' active' : ''}`}
               onClick={() => setShowPhases(prev => !prev)}
+              aria-pressed={showPhases}
             >
               Show Phases
+            </button>
+          )}
+          {!loading && graph && (
+            <button
+              className={`phase-toggle${showAttackerView ? ' active' : ''}`}
+              onClick={() => setShowAttackerView(v => !v)}
+              aria-pressed={showAttackerView}
+            >
+              {showAttackerView ? 'Attacker View' : 'Developer View'}
             </button>
           )}
           {!loading && graph && (
@@ -97,7 +113,26 @@ export default function TopologyGraphPage() {
         </div>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); fetchTopologyGraph(selectedProject).then(setGraph).catch(err => setError(err.message)); fetchLatestSpans(selectedProject).then(setLatestSpans).catch(() => {}); }}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loading && graph && graph.nodes.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+            </svg>
+          </div>
+          <h3>No Topology Data</h3>
+          <p>Agent topology will appear here once your instrumented agents start sending traces.</p>
+        </div>
+      )}
 
       <GraphCanvas
         data={graph}
@@ -105,6 +140,8 @@ export default function TopologyGraphPage() {
         highlightedNodeIds={highlightedNodeIds}
         phaseGroups={phases}
         showPhases={showPhases}
+        attackerView={showAttackerView}
+        agentRisks={agentRisks}
       />
 
       {latestSpans.length > 0 && traceDurationNs > 0 && (

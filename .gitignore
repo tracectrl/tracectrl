@@ -26,3 +26,8 @@ ui/dist/
 
 # Docker
 clickhouse-data/
+
+# Internal planning docs
+docs/launch-plan.md
+docs/meetings-actionables-for-launch.md
+docs/licensing-study.md

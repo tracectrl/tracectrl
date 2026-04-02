@@ -52,3 +52,39 @@ class SpanDetail(BaseModel):
     status_message: str
     attributes: dict[str, str]
     resource_attributes: dict[str, str]
+
+
+class AttackPathStep(BaseModel):
+    node_id: str
+    node_type: str
+    vulnerability: str
+    description: str
+
+
+class AttackPath(BaseModel):
+    path_id: str
+    rule_name: str
+    owasp_category: str
+    agents_involved: list[str]
+    path_steps: list[AttackPathStep]
+    risk_score: float
+    severity: str
+    computed_at: datetime
+
+
+class AgentRisk(BaseModel):
+    agent_id: str
+    risk_score: float
+    severity: str
+    path_count: int
+    top_rule: str
+    computed_at: datetime
+
+
+class RiskSummary(BaseModel):
+    risk_score: float
+    severity: str
+    critical_paths: int
+    agents_at_risk: int
+    learning_agents: int
+    computed_at: datetime

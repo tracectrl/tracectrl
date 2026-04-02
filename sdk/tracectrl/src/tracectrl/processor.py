@@ -1,10 +1,13 @@
 """TraceCtrlSpanProcessor — enriches spans with security attributes."""
 
 import hashlib
+from contextvars import ContextVar
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
 from tracectrl import schema
 from tracectrl.inference import infer_tool_category
 from tracectrl.session import current_session_id
+
+_span_sequence: ContextVar[int] = ContextVar("tracectrl_span_sequence", default=0)
 
 # OpenInference / Agno attribute keys (set by framework instrumentors)
 _OI_SPAN_KIND = "openinference.span.kind"
@@ -38,19 +41,39 @@ class TraceCtrlSpanProcessor(SpanProcessor):
                 except (TypeError, AttributeError):
                     pass
 
-        # Agent identity — derive from OpenInference/Agno attributes
+        # Agent identity — derive from OpenInference/Agno/Strands attributes
         oi_kind = attrs.get(_OI_SPAN_KIND, "")
         if oi_kind == "AGENT" and not attrs.get(schema.TC_AGENT_ID):
             agent_id = attrs.get(_AGNO_AGENT_ID) or attrs.get(_AGNO_TEAM_ID) or ""
             agent_name = attrs.get(_OI_AGENT_NAME, "")
-            # Fall back: derive ID from name if agno.agent.id is missing
+            # Fall back: derive name from SpanName (e.g. "invoke_agent Strands Agents")
+            if not agent_name:
+                span_name = span.name if hasattr(span, "name") else ""
+                if span_name.startswith("invoke_agent "):
+                    agent_name = span_name.replace("invoke_agent ", "")
+                elif span_name.endswith(".run"):
+                    agent_name = span_name.replace(".run", "").replace("_", " ")
+                elif span_name.endswith(".execute"):
+                    agent_name = span_name.replace(".execute", "").replace("_", " ")
+                elif span_name:
+                    agent_name = span_name
+            # Derive ID from name if no explicit ID
             if not agent_id and agent_name:
                 agent_id = agent_name.lower().replace(" ", "-")
             if agent_id:
                 _set(schema.TC_AGENT_ID, agent_id)
             if agent_name:
                 _set(schema.TC_AGENT_NAME, agent_name)
-            _set(schema.TC_AGENT_FRAMEWORK, "agno")
+            # Infer framework from span naming convention
+            span_name_check = span.name if hasattr(span, "name") else ""
+            if span_name_check.startswith("invoke_agent"):
+                _set(schema.TC_AGENT_FRAMEWORK, "strands")
+            elif span_name_check.startswith("openclaw."):
+                _set(schema.TC_AGENT_FRAMEWORK, "openclaw")
+            elif attrs.get(_AGNO_AGENT_ID) or attrs.get(_AGNO_TEAM_ID):
+                _set(schema.TC_AGENT_FRAMEWORK, "agno")
+            else:
+                _set(schema.TC_AGENT_FRAMEWORK, "unknown")
 
         # Session ID — fall back to Agno's session.id
         if not attrs.get(schema.TC_SESSION_ID):
@@ -58,11 +81,13 @@ class TraceCtrlSpanProcessor(SpanProcessor):
             if agno_session:
                 _set(schema.TC_SESSION_ID, agno_session)
 
-        # Tool category inference
+        # Tool category inference — keep result in local var since attrs is immutable snapshot
         tool_name = attrs.get(schema.TOOL_NAME, "")
         tool_desc = attrs.get(schema.TOOL_DESCRIPTION, "")
+        computed_tool_cat = ""
         if tool_name:
-            _set(schema.TC_TOOL_CATEGORY, infer_tool_category(tool_name, tool_desc))
+            computed_tool_cat = infer_tool_category(tool_name, tool_desc)
+            _set(schema.TC_TOOL_CATEGORY, computed_tool_cat)
 
         # System prompt hash (16 hex chars = 64-bit, balances collision resistance + storage)
         system_prompt = attrs.get(schema.LLM_SYSTEM, "")
@@ -70,10 +95,34 @@ class TraceCtrlSpanProcessor(SpanProcessor):
             h = hashlib.sha256(system_prompt.encode()).hexdigest()[:16]
             _set(schema.TC_SYSTEM_PROMPT_HASH, h)
 
-        # input.source (basic — Sprint 1)
-        caller_agent_id = attrs.get(schema.TC_CALLER_AGENT_ID, "")
+        # span_sequence — monotonic counter per session
+        seq = _span_sequence.get(0)
+        _set(schema.TC_SPAN_SEQUENCE, str(seq))
+        _span_sequence.set(seq + 1)
+
+        # memory.operation — detect from span kind + tool category
+        if oi_kind == "RETRIEVER":
+            _set(schema.TC_MEMORY_OPERATION, "read")
+        elif computed_tool_cat == "memory_write":
+            _set(schema.TC_MEMORY_OPERATION, "write")
+
+        # input.source classification (full — Sprint 2)
         if not attrs.get(schema.TC_INPUT_SOURCE):
-            _set(schema.TC_INPUT_SOURCE, "agent" if caller_agent_id else "user")
+            caller_agent_id = attrs.get(schema.TC_CALLER_AGENT_ID, "")
+            if computed_tool_cat in ("external_api", "email"):
+                _set(schema.TC_INPUT_SOURCE, "external")
+            elif computed_tool_cat in ("memory_read",) or oi_kind == "RETRIEVER":
+                _set(schema.TC_INPUT_SOURCE, "memory")
+            elif caller_agent_id:
+                _set(schema.TC_INPUT_SOURCE, "agent")
+            else:
+                _set(schema.TC_INPUT_SOURCE, "user")
+
+        # memory.write_provenance — trace back input source for memory writes
+        mem_op = attrs.get(schema.TC_MEMORY_OPERATION, "")
+        input_src = attrs.get(schema.TC_INPUT_SOURCE, "")
+        if mem_op == "write" and input_src:
+            _set(schema.TC_MEMORY_WRITE_PROVENANCE, input_src)
 
     def shutdown(self):
         pass

@@ -6,10 +6,12 @@ import TraceDetail from './pages/TraceDetail'
 import RiskDashboard from './pages/RiskDashboard'
 import AttackPaths from './pages/AttackPaths'
 import { ProjectProvider, useProject } from './context/ProjectContext'
+import { ThemeProvider, useTheme } from './context/ThemeContext'
 
 function Sidebar() {
   const location = useLocation()
   const { projects, selectedProject, setSelectedProject, loading: projectsLoading } = useProject()
+  const { theme, toggleTheme } = useTheme()
 
   const navItems = [
     { href: '/topology', label: 'Topology' },
@@ -64,6 +66,9 @@ function Sidebar() {
       ))}
 
       <div className="sidebar-footer">
+        <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+          {theme === 'dark' ? '☀️' : '🌙'} {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+        </button>
         <p>TraceCtrl v0.1.0</p>
         <p>by CloudsineAI</p>
       </div>
@@ -74,10 +79,12 @@ function Sidebar() {
 function App() {
   return (
     <BrowserRouter>
+      <ThemeProvider>
       <ProjectProvider>
         <div className="layout">
+          <a href="#main-content" className="sr-only">Skip to main content</a>
           <Sidebar />
-          <main className="main-content">
+          <main id="main-content" className="main-content">
             <Routes>
               <Route path="/" element={<Navigate to="/topology" replace />} />
               <Route path="/topology" element={<TopologyGraph />} />
@@ -90,6 +97,7 @@ function App() {
           </main>
         </div>
       </ProjectProvider>
+      </ThemeProvider>
     </BrowserRouter>
   )
 }

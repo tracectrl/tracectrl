@@ -66,3 +66,42 @@ CREATE TABLE IF NOT EXISTS tracectrl.pipeline_state (
 -- Seed watermark to 24 hours ago
 INSERT INTO tracectrl.pipeline_state (key, value, updated_at)
 VALUES ('last_processed_at', toString(now() - INTERVAL 24 HOUR), now());
+
+-- Attack paths discovered by TAGAAI rules
+CREATE TABLE IF NOT EXISTS tracectrl.attack_paths (
+    path_id         String,
+    rule_name       String,
+    owasp_category  String,
+    agents_involved Array(String),
+    path_steps      String,
+    risk_score      Float32,
+    severity        String,
+    computed_at     DateTime,
+    updated_at      DateTime
+) ENGINE = ReplacingMergeTree(updated_at)
+  ORDER BY path_id;
+
+-- Per-agent risk scores
+CREATE TABLE IF NOT EXISTS tracectrl.agent_risk_scores (
+    agent_id        String,
+    risk_score      Float32,
+    severity        String,
+    path_count      UInt32,
+    top_rule        String,
+    computed_at     DateTime,
+    updated_at      DateTime
+) ENGINE = ReplacingMergeTree(updated_at)
+  ORDER BY agent_id;
+
+-- System-wide risk summary (single row)
+CREATE TABLE IF NOT EXISTS tracectrl.system_risk (
+    id              UInt8 DEFAULT 1,
+    risk_score      Float32,
+    severity        String,
+    critical_paths  UInt32,
+    agents_at_risk  UInt32,
+    learning_agents UInt32,
+    computed_at     DateTime,
+    updated_at      DateTime
+) ENGINE = ReplacingMergeTree(updated_at)
+  ORDER BY id;

@@ -41,18 +41,22 @@ export default function TraceDetail() {
     return spans.find(s => !s.parent_span_id) || spans[0]
   }, [spans])
 
+  useEffect(() => {
+    document.title = `${rootSpan?.span_name || 'Trace'} — TraceCtrl`
+  }, [rootSpan])
+
   return (
     <div>
       <div className="page-header">
-        <button className="btn btn-ghost btn-sm mb-2" onClick={() => navigate('/sessions')}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <button className="btn btn-ghost btn-sm mb-2" onClick={() => navigate('/sessions')} aria-label="Back to Sessions">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 1L3 7l6 6" />
           </svg>
           Back to Sessions
         </button>
         <div className="section-tag">Trace</div>
         <h2>{rootSpan?.span_name || 'Loading...'}</h2>
-        <p className="page-meta">
+        <p className="page-meta" aria-live="polite">
           {loading
             ? 'Loading spans...'
             : `${spans.length} spans · ${formatDuration(traceDurationNs)} · ${traceId?.slice(-8)}`}
@@ -70,16 +74,20 @@ export default function TraceDetail() {
       ) : (
         <>
           {/* Tab bar */}
-          <div className="trace-tabs">
+          <div className="trace-tabs" role="tablist">
             <button
               className={`trace-tab${activeTab === 'tree' ? ' active' : ''}`}
               onClick={() => setActiveTab('tree')}
+              role="tab"
+              aria-selected={activeTab === 'tree'}
             >
               Span Tree
             </button>
             <button
               className={`trace-tab${activeTab === 'timeline' ? ' active' : ''}`}
               onClick={() => setActiveTab('timeline')}
+              role="tab"
+              aria-selected={activeTab === 'timeline'}
             >
               Timeline
             </button>

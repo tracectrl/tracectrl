@@ -67,8 +67,10 @@ export default function SpanTree({ spans, traceDurationNs, traceStartNs, selecte
               <button
                 className="span-toggle"
                 onClick={e => { e.stopPropagation(); toggleCollapse(node.span_id) }}
+                aria-expanded={!isCollapsed}
+                aria-label="Toggle children"
               >
-                {isCollapsed ? '▶' : '▼'}
+                {isCollapsed ? '\u25B6' : '\u25BC'}
               </button>
             ) : (
               <span className="span-toggle-placeholder" />
@@ -82,12 +84,12 @@ export default function SpanTree({ spans, traceDurationNs, traceStartNs, selecte
 
             {/* Status icon */}
             {isError ? (
-              <svg className="span-status-icon" viewBox="0 0 16 16" fill="none">
+              <svg className="span-status-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <circle cx="8" cy="8" r="7" stroke="#FC0404" strokeWidth="1.5" />
                 <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#FC0404" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             ) : (
-              <svg className="span-status-icon" viewBox="0 0 16 16" fill="none">
+              <svg className="span-status-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <circle cx="8" cy="8" r="7" stroke="#40706C" strokeWidth="1.5" />
                 <path d="M5 8l2 2 4-4" stroke="#40706C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>

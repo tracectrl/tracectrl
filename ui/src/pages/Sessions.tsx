@@ -20,6 +20,8 @@ export default function Sessions() {
   const [expandedLoading, setExpandedLoading] = useState(false)
   const [selectedSpan, setSelectedSpan] = useState<SpanDetail | null>(null)
 
+  useEffect(() => { document.title = 'Sessions — TraceCtrl' }, [])
+
   useEffect(() => {
     setLoading(true)
     fetchSessions(selectedProject)
@@ -92,14 +94,21 @@ export default function Sessions() {
       <div className="page-header">
         <div className="section-tag">Monitor</div>
         <h2>Sessions</h2>
-        <p className="page-meta">
+        <p className="page-meta" aria-live="polite">
           {loading
             ? 'Loading sessions...'
             : `${sessions.length} traces`}
         </p>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); setLoading(true); fetchSessions(selectedProject).then(setSessions).catch(err => setError(err.message)).finally(() => setLoading(false)); }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="table-container">
@@ -124,19 +133,19 @@ export default function Sessions() {
               <thead>
                 <tr>
                   <th style={{ width: 28 }} />
-                  <th onClick={() => toggleSort('root_span_name')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('root_span_name')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'root_span_name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Root Span{sortIndicator('root_span_name')}
                   </th>
                   <th>Agent</th>
-                  <th onClick={() => toggleSort('span_count')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('span_count')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'span_count' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Spans{sortIndicator('span_count')}
                   </th>
-                  <th onClick={() => toggleSort('total_duration_ns')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('total_duration_ns')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'total_duration_ns' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Duration{sortIndicator('total_duration_ns')}
                   </th>
                   <th style={{ minWidth: 120 }}>Waterfall</th>
                   <th>Status</th>
-                  <th onClick={() => toggleSort('start_time')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('start_time')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'start_time' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Time{sortIndicator('start_time')}
                   </th>
                 </tr>
@@ -154,6 +163,7 @@ export default function Sessions() {
                         onClick={() => handleRowClick(session.trace_id)}
                         style={{ cursor: 'pointer' }}
                         className={isExpanded ? 'selected' : ''}
+                        aria-expanded={isExpanded}
                       >
                         <td style={{ width: 28, textAlign: 'center', color: 'var(--gray-500)', fontSize: 10 }}>
                           {isExpanded ? '\u25BC' : '\u25B6'}

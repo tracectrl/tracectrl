@@ -15,6 +15,8 @@ export default function Agents() {
   const [expandedTools, setExpandedTools] = useState<AgentTool[]>([])
   const [expandedLoading, setExpandedLoading] = useState(false)
 
+  useEffect(() => { document.title = 'Agents — TraceCtrl' }, [])
+
   useEffect(() => {
     setLoading(true)
     fetchAgentList(selectedProject)
@@ -73,14 +75,21 @@ export default function Agents() {
       <div className="page-header">
         <div className="section-tag">Monitor</div>
         <h2>Agents</h2>
-        <p className="page-meta">
+        <p className="page-meta" aria-live="polite">
           {loading
             ? 'Loading agents...'
             : `${agents.length} agents`}
         </p>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); setLoading(true); fetchAgentList(selectedProject).then(setAgents).catch(err => setError(err.message)).finally(() => setLoading(false)); }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="table-container">
@@ -108,19 +117,19 @@ export default function Agents() {
               <thead>
                 <tr>
                   <th style={{ width: 28 }} />
-                  <th onClick={() => toggleSort('name')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('name')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Name{sortIndicator('name')}
                   </th>
                   <th>Framework</th>
                   <th>Model</th>
-                  <th onClick={() => toggleSort('tools_count')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('tools_count')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'tools_count' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Tools{sortIndicator('tools_count')}
                   </th>
-                  <th onClick={() => toggleSort('observation_count')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('observation_count')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'observation_count' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Observations{sortIndicator('observation_count')}
                   </th>
                   <th>Maturity</th>
-                  <th onClick={() => toggleSort('last_seen')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => toggleSort('last_seen')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'last_seen' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                     Last Seen{sortIndicator('last_seen')}
                   </th>
                 </tr>
@@ -135,6 +144,7 @@ export default function Agents() {
                         onClick={() => handleRowClick(agent.agent_id)}
                         style={{ cursor: 'pointer' }}
                         className={isExpanded ? 'selected' : ''}
+                        aria-expanded={isExpanded}
                       >
                         <td style={{ width: 28, textAlign: 'center', color: 'var(--gray-500)', fontSize: 10 }}>
                           {isExpanded ? '\u25BC' : '\u25B6'}
