@@ -12,9 +12,21 @@ def upsert_attack_paths(paths: list[dict]):
     rows = []
     for p in paths:
         rows.append((
-            p["path_id"], p["rule_name"], p["owasp_category"],
-            p["agents_involved"], json.dumps(p["path_steps"]),
-            p["risk_score"], p["severity"], now, now,
+            p["path_id"],
+            p["rule_id"],
+            p["rule_name"],
+            p["severity"],
+            p["owasp_tag"],
+            p["title"],
+            p["description"],
+            p["agent_id"],
+            p["agents_involved"],
+            p["path_nodes"],
+            p["path_edges"],
+            json.dumps(p["path_steps"]),
+            p["risk_score"],
+            now,
+            now,
         ))
     execute("INSERT INTO attack_paths VALUES", rows)
 

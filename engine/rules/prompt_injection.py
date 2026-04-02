@@ -28,14 +28,29 @@ class PromptInjectionRule(BaseRule):
                     has_guardrail = True
 
             if has_external_input and not has_guardrail:
+                # Find external tool for path tracking
+                external_tool = None
+                external_edge_id = None
+                for edge in agent_tools:
+                    contexts = json.loads(edge["call_contexts"]) if isinstance(edge["call_contexts"], str) else edge["call_contexts"]
+                    if isinstance(contexts, dict) and contexts.get("external", 0) > 0:
+                        external_tool = edge["tool_name"]
+                        external_edge_id = edge["edge_id"]
+                        break
+
                 results.append(RuleResult(
                     rule_name="vulnerableToPromptInjection",
+                    rule_id="prompt_injection",
                     owasp_category="ASI01",
+                    title="Prompt Injection Vulnerability",
+                    description=f"Agent '{agent['name']}' processes external input without human guardrails, exposing it to prompt injection attacks.",
                     agents_involved=[agent_id],
                     steps=[
                         AttackStep(agent_id, "agent", "no_input_sanitisation",
                                    f"Agent '{agent['name']}' receives external input without guardrail"),
                     ],
                     base_cvss=7.2,
+                    path_nodes=["external_input", agent_id, f"tool:{external_tool}"] if external_tool else ["external_input", agent_id],
+                    path_edges=[external_edge_id] if external_edge_id else [],
                 ))
         return results

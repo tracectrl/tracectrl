@@ -89,14 +89,20 @@ def run_attack_graph():
 
         paths.append({
             "path_id": path_id,
+            "rule_id": result.rule_id,
             "rule_name": result.rule_name,
-            "owasp_category": result.owasp_category,
+            "severity": severity,
+            "owasp_tag": result.owasp_category,
+            "title": result.title,
+            "description": result.description,
+            "agent_id": result.agents_involved[0] if result.agents_involved else "",
             "agents_involved": result.agents_involved,
+            "path_nodes": result.path_nodes,
+            "path_edges": result.path_edges,
             "path_steps": [{"node_id": s.node_id, "node_type": s.node_type,
                             "vulnerability": s.vulnerability, "description": s.description}
                            for s in result.steps],
             "risk_score": score,
-            "severity": severity,
         })
 
         # Accumulate per-agent scores

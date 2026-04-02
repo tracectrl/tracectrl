@@ -32,9 +32,13 @@ class DataLeakageRule(BaseRule):
             for tool_edge in exfil_tools:
                 tool_name = tool_edge["tool_name"]
                 tool_category = tool_edge["tool_category"]
+                edge_id = tool_edge["edge_id"]
                 results.append(RuleResult(
                     rule_name="vulnerableToDataLeakage",
+                    rule_id="data_leakage",
                     owasp_category="ASI01+ASI02",
+                    title="Data Leakage Vulnerability",
+                    description=f"Agent '{agent['name']}' is vulnerable to prompt injection and can send data externally via '{tool_name}', risking data exfiltration.",
                     agents_involved=[agent_id],
                     steps=[
                         AttackStep(agent_id, "agent", "prompt_injection",
@@ -43,5 +47,7 @@ class DataLeakageRule(BaseRule):
                                    f"Can exfiltrate via {tool_category} tool '{tool_name}'"),
                     ],
                     base_cvss=6.8,
+                    path_nodes=["external_input", agent_id, f"tool:{tool_name}"],
+                    path_edges=[edge_id],
                 ))
         return results

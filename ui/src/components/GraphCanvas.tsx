@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import cytoscape, { Core } from 'cytoscape'
 import dagre from 'cytoscape-dagre'
-import { TopologyGraph, TopologyNode } from '../api/client'
+import { TopologyGraph, TopologyNode, AttackOverlay } from '../api/client'
 import { AgentRisk } from '../api/risk'
 import { PhaseGroup } from '../hooks/usePhaseInference'
 
@@ -15,6 +15,8 @@ interface GraphCanvasProps {
   showPhases?: boolean
   attackerView?: boolean
   agentRisks?: AgentRisk[]
+  attackMode?: boolean
+  overlay?: AttackOverlay | null
 }
 
 /**
@@ -103,7 +105,7 @@ function buildElements(
 }
 
 export default function GraphCanvas({
-  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks,
+  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks, attackMode, overlay
 }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
@@ -372,6 +374,56 @@ export default function GraphCanvas({
     cy.endBatch()
   }, [attackerView, agentRisks])
 
+  // Attack mode styling effect
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+
+    if (attackMode && overlay) {
+      // Helper function to map severity to color
+      const severityColor = (severity: string) => {
+        switch (severity) {
+          case 'CRITICAL': return '#EF4444'
+          case 'HIGH': return '#F97316'
+          case 'MEDIUM': return '#EAB308'
+          default: return null
+        }
+      }
+
+      cy.startBatch()
+
+      // Dim all existing edges
+      cy.edges().style({ opacity: 0.15 })
+
+      // Risk-colour compromised agent nodes
+      overlay.compromised_nodes.forEach(({ node_id, severity }) => {
+        const color = severityColor(severity)
+        if (color) {
+          cy.$(`#${node_id}`).style({ 'background-color': color })
+        }
+      })
+
+      // Highlight attack path edges in red, thicker
+      overlay.attack_edges.forEach(({ source, target }) => {
+        cy.edges(`[source="${source}"][target="${target}"]`).style({
+          'line-color': '#EF4444',
+          'target-arrow-color': '#EF4444',
+          'width': 3,
+          'opacity': 1,
+        })
+      })
+
+      cy.endBatch()
+    } else {
+      // Restore original styles
+      cy.elements().removeStyle()
+    }
+  }, [attackMode, overlay])
+
+  // Recalculate phase boxes when showPhases or phaseGroups change
+  useEffect(() => {
+    recalcPhaseBoxes()
+  }, [recalcPhaseBoxes])
   return (
     <div className="graph-canvas-wrapper" role="img" aria-label={`Agent topology graph with ${data?.nodes.length ?? 0} nodes and ${data?.edges.length ?? 0} edges`}>
       <div className="sr-only">

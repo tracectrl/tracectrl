@@ -42,3 +42,35 @@ export async function fetchAgents(): Promise<Record<string, unknown>[]> {
   if (!res.ok) throw new Error(`Failed to fetch agents: ${res.statusText}`)
   return res.json()
 }
+
+export interface AttackPath {
+  path_id: string
+  rule_id: string
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
+  owasp_tag: string
+  title: string
+  description: string
+  agent_id: string
+  path_nodes: string[]
+  path_edges: string[]
+  risk_score: number
+  detected_at: string
+}
+
+export interface AttackOverlay {
+  compromised_nodes: { node_id: string; severity: string; risk_score: number }[]
+  attack_edges: { source: string; target: string; rule_id: string; severity: string }[]
+}
+
+export async function fetchAttackPaths(): Promise<AttackPath[]> {
+  const res = await fetch(`${ENGINE_URL}/api/v1/attack-graph/paths`)
+  if (!res.ok) throw new Error(`Failed to fetch attack paths: ${res.statusText}`)
+  const data = await res.json()
+  return data.paths
+}
+
+export async function fetchAttackOverlay(): Promise<AttackOverlay> {
+  const res = await fetch(`${ENGINE_URL}/api/v1/attack-graph/overlay`)
+  if (!res.ok) throw new Error(`Failed to fetch attack overlay: ${res.statusText}`)
+  return res.json()
+}
