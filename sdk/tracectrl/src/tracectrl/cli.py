@@ -71,8 +71,8 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     for name, url in checks:
         try:
             req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                status = resp.status
+            with urllib.request.urlopen(req, timeout=3):
+                pass
             print(f"  [OK]   {name} ({url})")
         except urllib.error.HTTPError as e:
             # 405 = endpoint exists but doesn't accept GET (e.g. OTel collector)
