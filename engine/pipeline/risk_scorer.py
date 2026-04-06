@@ -9,7 +9,14 @@ TOOL_CATEGORY_WEIGHTS = {
 }
 
 INPUT_SOURCE_WEIGHTS = {
-    "external": 1.0, "memory": 0.7, "agent": 0.5, "user": 0.3,
+    # External untrusted sources (webhooks, file uploads, external APIs)
+    "external": 1.0,
+    # User input (authenticated users can still be malicious: prompt injection, insider threats)
+    "user": 0.8,
+    # Memory/vector stores (could contain poisoned data from earlier)
+    "memory": 0.7,
+    # Inter-agent communication (internal data flow, lower risk)
+    "agent": 0.5,
 }
 
 SEVERITY_THRESHOLDS = [
@@ -22,7 +29,23 @@ SEVERITY_THRESHOLDS = [
 
 def compute_path_risk(rule_result: RuleResult, tool_category: str = "internal_api",
                       input_source: str = "user", hop_count: int = 1) -> float:
-    hop_mult = {1: 1.0, 2: 1.3, 3: 1.6}.get(min(hop_count, 3), 2.0)
+    """Calculate risk score for an attack path.
+
+    Args:
+        rule_result: The attack path result with base CVSS score
+        tool_category: Category of the endpoint tool (code_execution, email, etc.)
+        input_source: Source of untrusted input (external, user, memory, agent)
+        hop_count: Number of agents in the attack path
+
+    Returns:
+        Risk score (float)
+
+    Note: Longer attack chains have LOWER multipliers because they're harder to exploit
+    (more failure points, more complexity, lower likelihood of success).
+    """
+    # INVERTED hop multiplier: longer chains = harder to exploit = lower risk
+    hop_mult = {1: 1.0, 2: 0.95, 3: 0.85, 4: 0.75}.get(min(hop_count, 4), 0.7)
+
     return (
         rule_result.base_cvss
         * TOOL_CATEGORY_WEIGHTS.get(tool_category, 0.3)

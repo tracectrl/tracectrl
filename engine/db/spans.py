@@ -9,8 +9,8 @@ from datetime import datetime
 from engine.db.client import execute
 
 
-def fetch_new_spans(since: datetime) -> list[dict]:
-    """Fetch all spans since the given timestamp from the OTel exporter table."""
+def fetch_all_spans() -> list[dict]:
+    """Fetch all spans from the OTel exporter table. ReplacingMergeTree handles deduplication."""
     rows = execute(
         """
         SELECT
@@ -26,15 +26,26 @@ def fetch_new_spans(since: datetime) -> list[dict]:
             StatusMessage,
             SpanAttributes
         FROM otel_traces
-        WHERE Timestamp > %(since)s
         ORDER BY Timestamp ASC
-        """,
-        {"since": since},
+        """
     )
 
     spans = []
+    span_by_id = {}  # For building parent-child hierarchy
     for row in rows:
         attrs = row[10] if row[10] else {}  # SpanAttributes is a Map(String, String)
+
+        # Extract nested metadata if present (from @ingress decorator)
+        if "metadata" in attrs:
+            try:
+                import json
+                metadata = json.loads(attrs["metadata"])
+                # Merge metadata into attrs
+                for key, value in metadata.items():
+                    if key not in attrs:  # Don't override existing attrs
+                        attrs[key] = str(value) if not isinstance(value, str) else value
+            except (json.JSONDecodeError, TypeError):
+                pass
         spans.append({
             "timestamp": row[0],
             "trace_id": row[1],
@@ -74,11 +85,15 @@ def fetch_new_spans(since: datetime) -> list[dict]:
             "tc_caller_agent_id": attrs.get("tracectrl.caller.agent_id", ""),
             "tc_input_source": attrs.get("tracectrl.input.source", ""),
             "tc_tool_category": attrs.get("tracectrl.tool.category", ""),
+            "tc_tool_direction": attrs.get("tracectrl.tool.direction", ""),
             "tc_tool_target": attrs.get("tracectrl.tool.target", ""),
             "tc_memory_operation": attrs.get("tracectrl.memory.operation", ""),
             "tc_memory_store_id": attrs.get("tracectrl.memory.store_id", ""),
             "tc_system_prompt_hash": attrs.get("tracectrl.system_prompt_hash", ""),
             "tc_span_sequence": int(attrs.get("tracectrl.span_sequence", "0") or "0"),
+            # Ingress detection
+            "tc_ingress": attrs.get("tracectrl.ingress", "") == "True" or attrs.get("tracectrl.ingress", "") == "true",
+            "tc_trigger_type": attrs.get("tracectrl.trigger_type", ""),
             # OpenClaw-specific attributes — prefer namespaced keys over bare keys
             # to avoid pollution from non-OpenClaw spans that use common attribute names
             "_oc_channel": attrs.get("openclaw.channel", "") or attrs.get("channel", ""),
@@ -88,6 +103,16 @@ def fetch_new_spans(since: datetime) -> list[dict]:
             "_oc_outcome": attrs.get("openclaw.outcome", "") or attrs.get("outcome", ""),
             "_oc_chat_id": attrs.get("openclaw.chatId", "") or attrs.get("chatId", ""),
         })
+
+        # Index by span_id for parent-child lookup
+        span_by_id[spans[-1]["span_id"]] = spans[-1]
+
+    # Build parent-child map for delegation detection
+    children_by_parent = {}
+    for span in spans:
+        parent_id = span["parent_span_id"]
+        if parent_id:
+            children_by_parent.setdefault(parent_id, []).append(span)
 
     # Post-process: derive agent identity from SpanName for frameworks
     # that don't set agent.name (e.g. Strands: "invoke_agent Foo")
@@ -116,6 +141,9 @@ def fetch_new_spans(since: datetime) -> list[dict]:
             # set to "agno" during initial extraction (lines 68-70) and won't reach here
             if not span["tc_agent_framework"]:
                 if "invoke_agent" in name:
+                    span["tc_agent_framework"] = "strands"
+                elif is_agent_chain:
+                    # CHAIN spans promoted to AGENT (e.g. "payment_agent.execute") are Strands agents
                     span["tc_agent_framework"] = "strands"
                 else:
                     span["tc_agent_framework"] = "unknown"
@@ -165,5 +193,24 @@ def fetch_new_spans(since: datetime) -> list[dict]:
         # Session ID from OpenClaw
         if not span["tc_session_id"]:
             span["tc_session_id"] = span["_oc_session_id"]
+
+    # Post-process: Detect agent delegation wrappers
+    # A TOOL span that has a child AGENT span is actually an agent delegation wrapper,
+    # not a primitive tool. This handles the "agent-as-tool" pattern in Strands.
+    for span in spans:
+        if span["oi_span_kind"] == "TOOL":
+            children = children_by_parent.get(span["span_id"], [])
+            child_agents = [c for c in children if c["oi_span_kind"] == "AGENT"]
+
+            if child_agents:
+                # This tool spawned an agent → it's a delegation wrapper
+                span["tc_tool_category"] = "agent_delegation"
+                # Link to the delegated agent for topology visualization
+                delegate = child_agents[0]  # Take first child agent
+                span["tc_delegate_agent_id"] = delegate["tc_agent_id"]
+                span["tc_delegate_agent_name"] = delegate["tc_agent_name"]
+            elif not span["tc_tool_category"]:
+                # No child agents → this is a genuine primitive tool
+                span["tc_tool_category"] = "primitive"
 
     return spans

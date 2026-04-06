@@ -7,6 +7,7 @@ from engine.db.client import execute
 from engine.rules.prompt_injection import PromptInjectionRule
 from engine.rules.excessive_agency import ExcessiveAgencyRule
 from engine.rules.data_leakage import DataLeakageRule
+from engine.rules.ingress_to_endpoint import IngressToEndpointRule
 from engine.pipeline.risk_scorer import compute_path_risk, severity_for_score
 from engine.db.attack_graph import upsert_attack_paths, upsert_agent_risk_scores, upsert_system_risk
 
@@ -53,7 +54,11 @@ def run_attack_graph():
     leakage_results = r3.evaluate(agents, tool_edges, agent_edges,
                                    injection_results=injection_results)
 
-    all_results = injection_results + agency_results + leakage_results
+    # Run ingress-to-endpoint attack path detection
+    r4 = IngressToEndpointRule()
+    ingress_results = r4.evaluate(agents, tool_edges, agent_edges)
+
+    all_results = injection_results + agency_results + leakage_results + ingress_results
     if not all_results:
         logger.info("Attack graph: no vulnerabilities detected.")
         return
@@ -67,21 +72,43 @@ def run_attack_graph():
         input_src = "user"
         # Extract tool category from steps if available
         for step in result.steps:
+            # Check for high-risk impacts in vulnerability field (agent endpoints)
+            if step.node_type == "agent" and step.vulnerability in (
+                "financial_operations", "financial_fraud"
+            ):
+                tool_cat = "code_execution"  # Treat financial ops as high-risk
+                break
+
             if step.node_type == "tool":
                 # Parse category from description
                 for cat in ("code_execution", "email", "external_api", "file_system"):
                     if cat in step.description:
                         tool_cat = cat
                         break
-        # Check call_contexts for input source
-        for edge in tool_edges:
-            if edge["agent_id"] in result.agents_involved:
-                contexts = json.loads(edge["call_contexts"]) if isinstance(edge["call_contexts"], str) else (edge["call_contexts"] or {})
-                if isinstance(contexts, dict) and contexts.get("external", 0) > 0:
-                    input_src = "external"
-                    break
 
-        score = compute_path_risk(result, tool_cat, input_src, len(result.steps))
+        # Determine input source based on attack path origin
+        if result.path_nodes and result.path_nodes[0].startswith("ingress:"):
+            # Direct external ingress (upload, webhook, email) - highest risk
+            input_src = "external"
+        elif result.path_nodes and result.path_nodes[0].startswith("tool:"):
+            # Compromised tool (MCP, external API) - medium-high risk
+            # The tool itself is the untrusted source, not direct external input
+            input_src = "agent"
+        else:
+            # Fallback: check call_contexts for external input
+            for edge in tool_edges:
+                if edge["agent_id"] in result.agents_involved:
+                    contexts = json.loads(edge["call_contexts"]) if isinstance(edge["call_contexts"], str) else (edge["call_contexts"] or {})
+                    if isinstance(contexts, dict) and contexts.get("external", 0) > 0:
+                        input_src = "external"
+                        break
+
+        # Count only AGENTS in the path for hop count (exclude ingress and tools)
+        # This represents the actual attack chain complexity
+        agent_count = len([n for n in result.path_nodes
+                          if not n.startswith("tool:") and not n.startswith("ingress:")])
+
+        score = compute_path_risk(result, tool_cat, input_src, agent_count)
         severity = severity_for_score(score)
         path_id = hashlib.md5(
             f"{result.rule_name}:{'|'.join(result.agents_involved)}:{tool_cat}".encode()

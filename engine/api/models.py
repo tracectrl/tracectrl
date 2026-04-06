@@ -64,12 +64,12 @@ class AttackPathStep(BaseModel):
 class AttackPath(BaseModel):
     path_id: str
     rule_name: str
-    owasp_category: str
+    owasp_tag: str
     agents_involved: list[str]
     path_steps: list[AttackPathStep]
     risk_score: float
     severity: str
-    computed_at: datetime
+    detected_at: datetime
 
 
 class AgentRisk(BaseModel):

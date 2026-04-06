@@ -23,6 +23,7 @@ export default function TopologyGraphPage() {
   const [attackMode, setAttackMode] = useState(false)
   const [attackPaths, setAttackPaths] = useState<AttackPath[]>([])
   const [overlay, setOverlay] = useState<AttackOverlay | null>(null)
+  const [selectedAttackPath, setSelectedAttackPath] = useState<AttackPath | null>(null)
 
   useEffect(() => { document.title = 'Topology — TraceCtrl' }, [])
 
@@ -164,6 +165,7 @@ export default function TopologyGraphPage() {
         agentRisks={agentRisks}
         attackMode={attackMode}
         overlay={overlay}
+        selectedAttackPath={selectedAttackPath}
       />
 
       {latestSpans.length > 0 && traceDurationNs > 0 && (
@@ -177,7 +179,15 @@ export default function TopologyGraphPage() {
       )}
 
       {attackMode ? (
-        <AttackFindingsPanel paths={attackPaths} onClose={() => setAttackMode(false)} />
+        <AttackFindingsPanel
+          paths={attackPaths}
+          selectedPath={selectedAttackPath}
+          onPathSelect={setSelectedAttackPath}
+          onClose={() => {
+            setAttackMode(false)
+            setSelectedAttackPath(null)
+          }}
+        />
       ) : (
         <SidebarPanel node={selectedNode} onClose={() => setSelectedNode(null)} />
       )}

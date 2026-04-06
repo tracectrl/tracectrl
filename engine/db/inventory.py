@@ -30,12 +30,20 @@ def _get_existing_agent(agent_id: str) -> dict | None:
 
 def update_agent_inventory(spans: list[dict]):
     """Group spans by agent_id and upsert agent_inventory with cumulative state."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     agents: dict[str, dict] = {}
+
+    logger.info(f"update_agent_inventory: Processing {len(spans)} total spans")
 
     for span in spans:
         agent_id = span.get("tc_agent_id")
         if not agent_id:
             continue
+
+        if agent_id not in agents:
+            logger.info(f"  Found new agent span: {agent_id}")
 
         if agent_id not in agents:
             # Start from existing state or fresh
@@ -75,7 +83,9 @@ def update_agent_inventory(spans: list[dict]):
             agent["system_prompt_hash"] = span.get("tc_system_prompt_hash", "")
 
     now = datetime.utcnow()
+    logger.info(f"update_agent_inventory: Inserting {len(agents)} agents into inventory")
     for agent in agents.values():
+        logger.info(f"  Inserting agent: {agent['agent_id']}")
         tools = list(agent["tools_observed"])
         cumulative_obs = agent["observation_count"] + agent.get("_new_obs", 0)
         run_count = agent["run_count"] + 1
@@ -94,6 +104,7 @@ def update_agent_inventory(spans: list[dict]):
                 agent["first_seen"], agent["last_seen"], now,
             )],
         )
+    logger.info(f"update_agent_inventory: Complete")
 
 
 def get_all_agents(service: str | None = None) -> list[dict]:

@@ -13,6 +13,10 @@ class ExcessiveAgencyRule(BaseRule):
 
     def evaluate(self, agents, tool_edges, agent_edges,
                  injection_results: list[RuleResult] | None = None):
+        # DISABLED: This rule creates standalone "vulnerability" findings without showing
+        # the actual attack path from ingress. These are now covered by ingressToEndpointRule.
+        return []
+
         if not injection_results:
             return []
 
