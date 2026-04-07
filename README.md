@@ -17,7 +17,7 @@ TraceCtrl gives security teams and developers complete visibility into every age
 - **MCP Proxy Server** — Transparent proxy for IDE agent tracing (Cursor, Claude Code). Captures every tool call made through MCP-compatible agents without code changes.
 - **Security-Enriched Spans** — OpenTelemetry spans with `input.source` classification, memory write provenance, prompt drift detection, and tool risk categorization.
 - **Dashboard** — Topology (developer + attacker view), Sessions (trace explorer), Agents (inventory), Risk Dashboard, and Attack Paths (ranked vulnerability chains).
-- **Framework Support** — LangChain, CrewAI, Agno, Google ADK, and AWS Strands — each requiring only 3 lines of code.
+- **Framework Support** — Agno and AWS Strands (stable), LangChain, CrewAI, Google ADK, and OpenClaw (beta) — each requiring only 3 lines of code.
 
 ---
 
