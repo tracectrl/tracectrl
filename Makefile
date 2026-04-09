@@ -1,9 +1,10 @@
-.PHONY: setup dev test lint build clean tui
+.PHONY: setup dev test lint build clean tui scan
 
 # ── Setup ──────────────────────────────────────────────
 setup:
 	python3 -m pip install --upgrade pip
 	pip install -e ./sdk/tracectrl
+	pip install -e ./scanner
 	pip install -r engine/requirements.txt
 	pip install pytest ruff
 	@echo "\n✓ Setup complete. Run 'make dev' to start the stack."
@@ -18,7 +19,7 @@ test:
 
 # ── Lint ───────────────────────────────────────────────
 lint:
-	ruff check sdk/ engine/ tests/
+	ruff check sdk/ engine/ scanner/ tests/
 
 # ── Build ──────────────────────────────────────────────
 build:
@@ -27,6 +28,10 @@ build:
 # ── TUI Setup ─────────────────────────────────────────
 tui:
 	python3 setup/tui.py
+
+# ── Scan ───────────────────────────────────────────────
+scan:
+	tracectrl scan ~/.openclaw/
 
 # ── Clean ──────────────────────────────────────────────
 clean:

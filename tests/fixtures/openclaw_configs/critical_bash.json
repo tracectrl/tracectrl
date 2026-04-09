@@ -1,0 +1,6 @@
+{
+  "gateway": { "bind": "127.0.0.1" },
+  "channels": { "telegram": { "enabled": true, "dmPolicy": "pairing" } },
+  "agents": { "defaults": { "tools": { "allow": ["bash", "exec", "web_fetch"] } } },
+  "logging": { "level": "info", "audit": true }
+}

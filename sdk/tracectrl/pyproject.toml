@@ -12,10 +12,10 @@ authors = [{ name = "CloudsineAI" }]
 dependencies = [
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+    "textual>=0.50.0",
+    "rich>=13.0.0",
+    "tracectrl-scanner>=0.1.0",
 ]
-
-[project.optional-dependencies]
-setup = ["textual>=0.50.0", "rich>=13.0.0"]
 
 [project.scripts]
 tracectrl = "tracectrl.cli:main"

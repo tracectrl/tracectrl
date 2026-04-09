@@ -1,0 +1,6 @@
+{
+  "gateway": { "bind": "0.0.0.0" },
+  "channels": { "telegram": { "enabled": true, "dmPolicy": "pairing" } },
+  "agents": { "defaults": { "tools": { "allow": ["exec"] } } },
+  "logging": { "level": "info", "audit": true }
+}

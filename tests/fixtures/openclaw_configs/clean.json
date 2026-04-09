@@ -1,0 +1,43 @@
+{
+  "gateway": {
+    "bind": "127.0.0.1",
+    "allowedHosts": ["localhost"]
+  },
+  "webhook": {
+    "tls": { "enabled": true },
+    "auth": { "token": "${WEBHOOK_SECRET}" }
+  },
+  "channels": {
+    "defaults": { "groupPolicy": "allowlist" },
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "token": "${TELEGRAM_TOKEN}"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "~/.openclaw/workspace",
+      "model": { "primary": "anthropic/claude-sonnet-4-6" },
+      "tools": { "allow": ["web_fetch", "exec"] },
+      "contentFilter": { "enabled": true }
+    },
+    "list": [{ "id": "main", "default": true }]
+  },
+  "tools": {
+    "profile": "coding",
+    "web": { "fetch": { "allowedDomains": ["docs.example.com"] } }
+  },
+  "subagents": { "allowAgents": false },
+  "cron": { "enabled": false },
+  "logging": {
+    "level": "info",
+    "audit": true
+  },
+  "models": {
+    "providers": {
+      "anthropic": { "apiKey": "${ANTHROPIC_API_KEY}" }
+    }
+  },
+  "session": { "scope": "per-sender", "maintenance": { "pruneAfter": "7d" } }
+}

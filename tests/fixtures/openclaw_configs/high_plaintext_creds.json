@@ -1,0 +1,11 @@
+{
+  "gateway": { "bind": "127.0.0.1" },
+  "channels": { "telegram": { "enabled": true, "dmPolicy": "pairing" } },
+  "agents": { "defaults": { "tools": { "allow": ["exec"] } } },
+  "models": {
+    "providers": {
+      "anthropic": { "apiKey": "sk-ant-api03-realkey123456789" }
+    }
+  },
+  "logging": { "level": "info", "audit": true }
+}

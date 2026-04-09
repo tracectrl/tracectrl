@@ -1,0 +1,14 @@
+{
+  "gateway": { "bind": "127.0.0.1" },
+  "channels": {
+    "whatsapp": { "enabled": true, "dmPolicy": "open" },
+    "telegram": { "enabled": true, "dmPolicy": "open" }
+  },
+  "agents": {
+    "defaults": { "tools": { "allow": ["web_fetch", "exec"] } },
+    "list": [{ "id": "main", "default": true }]
+  },
+  "tools": { "web": { "fetch": {} } },
+  "subagents": { "allowAgents": true },
+  "logging": { "level": "debug", "audit": false }
+}
