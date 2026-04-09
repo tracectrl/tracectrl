@@ -300,9 +300,78 @@ def cmd_fix(args: argparse.Namespace) -> None:
 
 
 def cmd_monitor(args: argparse.Namespace) -> None:
-    """Start the live monitoring dashboard (not yet implemented)."""
-    print("The monitor command is not yet implemented.")
-    sys.exit(1)
+    """Check if OpenClaw's diagnostics-otel plugin is configured and show status."""
+    try:
+        from tracectrl_scanner.discovery import discover
+        from tracectrl_scanner.parser import parse_config
+    except ImportError:
+        print("Scanner not installed. Run: pip install tracectrl-scanner")
+        sys.exit(1)
+
+    from rich.console import Console
+    from rich.panel import Panel
+    console = Console()
+
+    path = getattr(args, 'path', None)
+    try:
+        root = discover(path)
+    except FileNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        sys.exit(1)
+
+    config = parse_config(root)
+    diagnostics = config.get("diagnostics", {})
+    otel = diagnostics.get("otel", {})
+
+    if not otel.get("enabled"):
+        console.print("[yellow]OpenClaw diagnostics-otel plugin is not configured.[/yellow]\n")
+        console.print("Add this to your ~/.openclaw/openclaw.json:\n")
+        snippet = '''{
+  "plugins": { "allow": ["diagnostics-otel"] },
+  "diagnostics": {
+    "enabled": true,
+    "otel": {
+      "enabled": true,
+      "endpoint": "http://localhost:4318",
+      "protocol": "http/protobuf",
+      "serviceName": "openclaw-gateway",
+      "traces": true,
+      "metrics": false,
+      "logs": false,
+      "sampleRate": 1.0,
+      "flushIntervalMs": 5000
+    }
+  }
+}'''
+        console.print(Panel(snippet, title="Required Configuration", border_style="yellow"))
+        console.print("\nThen run: [bold]openclaw plugins enable diagnostics-otel[/bold]")
+        sys.exit(1)
+
+    endpoint = otel.get("endpoint", "not set")
+    service = otel.get("serviceName", "not set")
+    sample_rate = otel.get("sampleRate", "not set")
+
+    console.print("[green]OpenClaw diagnostics-otel is configured![/green]\n")
+    console.print(f"  Endpoint:    {endpoint}")
+    console.print(f"  Service:     {service}")
+    console.print(f"  Sample Rate: {sample_rate}")
+    console.print(f"  Traces:      {otel.get('traces', False)}")
+    console.print(f"  Metrics:     {otel.get('metrics', False)}")
+
+    # Check if TraceCtrl collector is reachable
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(endpoint, method="GET")
+        urllib.request.urlopen(req, timeout=3)
+        console.print(f"\n  [green]✓[/green] Collector at {endpoint} is reachable")
+    except urllib.error.HTTPError as e:
+        if e.code == 405:
+            console.print(f"\n  [green]✓[/green] Collector at {endpoint} is reachable")
+        else:
+            console.print(f"\n  [red]✗[/red] Collector at {endpoint} returned HTTP {e.code}")
+    except Exception as e:
+        console.print(f"\n  [red]✗[/red] Cannot reach collector at {endpoint}: {e}")
 
 
 def main() -> None:
@@ -370,6 +439,12 @@ def main() -> None:
     # --- monitor ---------------------------------------------------------------
     monitor_parser = subparsers.add_parser(
         "monitor", help="Start the live monitoring dashboard"
+    )
+    monitor_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Path to OpenClaw installation (default: auto-discover)",
     )
     monitor_parser.add_argument(
         "--port",

@@ -1927,3 +1927,44 @@ h4 {
   background: var(--dark);
   color: var(--white);
 }
+
+
+/* ── SCAN REPORT ───────────────────────────────────── */
+.scan-severity-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.scan-severity-card {
+  background: var(--dark-card);
+  border: 1px solid var(--dark-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  text-align: center;
+}
+
+.scan-severity-count {
+  font-size: 32px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+
+.scan-severity-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gray-500);
+  margin-top: var(--space-2);
+}
+
+.scan-remediation {
+  padding: var(--space-3) var(--space-4);
+  background: var(--dark-surface);
+  border-top: 1px solid var(--dark-border);
+  font-size: 13px;
+  color: var(--gray-400);
+}

@@ -105,3 +105,20 @@ CREATE TABLE IF NOT EXISTS tracectrl.system_risk (
     updated_at      DateTime
 ) ENGINE = ReplacingMergeTree(updated_at)
   ORDER BY id;
+
+-- Scan results from static OpenClaw analysis
+CREATE TABLE IF NOT EXISTS tracectrl.scan_results (
+    scan_id        String,
+    scanned_at     DateTime,
+    openclaw_path  String,
+    profile        String,
+    check_id       String,
+    section        String,
+    title          String,
+    severity       String,
+    passed         UInt8,
+    finding        String,
+    remediation    String,
+    config_path    String
+) ENGINE = MergeTree()
+  ORDER BY (scan_id, check_id);

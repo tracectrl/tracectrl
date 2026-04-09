@@ -5,6 +5,7 @@ import Agents from './pages/Agents'
 import TraceDetail from './pages/TraceDetail'
 import RiskDashboard from './pages/RiskDashboard'
 import AttackPaths from './pages/AttackPaths'
+import ScanReport from './pages/ScanReport'
 import { ProjectProvider, useProject } from './context/ProjectContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 
@@ -19,6 +20,7 @@ function Sidebar() {
     { href: '/agents', label: 'Agents' },
     { href: '/risk', label: 'Risk Dashboard' },
     { href: '/attacks', label: 'Attack Paths' },
+    { href: '/scan', label: 'Scan Report' },
   ]
 
   return (
@@ -93,6 +95,7 @@ function App() {
               <Route path="/agents" element={<Agents />} />
               <Route path="/risk" element={<RiskDashboard />} />
               <Route path="/attacks" element={<AttackPaths />} />
+              <Route path="/scan" element={<ScanReport />} />
             </Routes>
           </main>
         </div>
