@@ -12,6 +12,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from engine.db.client import ensure_schema
+    ensure_schema()
     start_scheduler()
     yield
     stop_scheduler()
