@@ -74,6 +74,9 @@ def ensure_schema() -> None:
             check_id String, section String, title String, severity String,
             passed UInt8, finding String, remediation String, config_path String
         ) ENGINE = MergeTree() ORDER BY (scan_id, check_id)""",
+        f"""CREATE TABLE IF NOT EXISTS {db}.scan_topology (
+            scan_id String, created_at DateTime, topology_json String
+        ) ENGINE = ReplacingMergeTree(created_at) ORDER BY scan_id""",
     ]
     client = get_client()
     for stmt in stmts:

@@ -1968,3 +1968,32 @@ h4 {
   font-size: 13px;
   color: var(--gray-400);
 }
+
+.scan-topology-panel {
+  margin: var(--space-6) 0;
+  border: 1px solid var(--dark-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.scan-topology-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  background: var(--dark-card);
+  border-bottom: 1px solid var(--dark-border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.scan-topology-canvas {
+  width: 100%;
+  height: 480px;
+  background-color: var(--dark-surface);
+  background-image: radial-gradient(circle, var(--gray-800) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

@@ -26,9 +26,30 @@ export interface ScanResult {
   config_path: string
 }
 
+export interface ScanTopologyNode {
+  id: string
+  type: string
+  label: string
+  properties: Record<string, unknown>
+}
+
+export interface ScanTopologyEdge {
+  id: string
+  source: string
+  target: string
+  type: string
+  properties: Record<string, unknown>
+}
+
+export interface ScanTopology {
+  nodes: ScanTopologyNode[]
+  edges: ScanTopologyEdge[]
+}
+
 export interface ScanDetail {
   scan_id: string | null
   results: ScanResult[]
+  topology: ScanTopology | null
 }
 
 export async function fetchScans(): Promise<ScanSummary[]> {

@@ -145,7 +145,7 @@ def _discover_engine_url(openclaw_config: dict | None = None) -> str | None:
     return None
 
 
-def _upload_scan_results(engine_url: str, scan_path: str, profile: str, checks: list[dict]) -> None:
+def _upload_scan_results(engine_url: str, scan_path: str, profile: str, checks: list[dict], topology: dict | None = None) -> None:
     """Best-effort upload of scan results to the TraceCtrl engine."""
     import urllib.request
 
@@ -153,11 +153,14 @@ def _upload_scan_results(engine_url: str, scan_path: str, profile: str, checks: 
     db_fields = {"check_id", "section", "title", "severity", "passed", "finding", "remediation", "config_path"}
     clean_checks = [{k: (v if v is not None else "") for k, v in c.items() if k in db_fields} for c in checks]
 
-    upload_payload = json.dumps({
+    payload_dict = {
         "scan_path": scan_path,
         "profile": profile,
         "checks": clean_checks,
-    }, default=str).encode("utf-8")
+    }
+    if topology:
+        payload_dict["topology"] = topology
+    upload_payload = json.dumps(payload_dict, default=str).encode("utf-8")
 
     url = f"{engine_url}/api/v1/scans"
     req = urllib.request.Request(url, data=upload_payload, method="POST")
@@ -223,12 +226,25 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
     # --- Upload results to engine (best-effort) --------------------------------
     checks_dicts = [dataclasses.asdict(r) for r in results]
+    topology_dict = {
+        "nodes": [
+            {"id": n.id, "type": n.type.value if hasattr(n.type, 'value') else n.type,
+             "label": n.label, "properties": n.properties}
+            for n in graph.nodes
+        ],
+        "edges": [
+            {"id": e.id, "source": e.source, "target": e.target,
+             "type": e.type.value if hasattr(e.type, 'value') else e.type,
+             "properties": e.properties}
+            for e in graph.edges
+        ],
+    }
     no_upload = args.no_upload
 
     if not no_upload:
         engine_url = args.engine_url or _discover_engine_url(config)
         if engine_url:
-            _upload_scan_results(engine_url, str(root), profile, checks_dicts)
+            _upload_scan_results(engine_url, str(root), profile, checks_dicts, topology=topology_dict)
         else:
             print("  [info] No reachable TraceCtrl engine found — skipping upload.")
             print("         Results are shown below. Use --json to export.")

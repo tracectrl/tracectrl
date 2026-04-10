@@ -4,7 +4,7 @@ import re
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from engine.db.scan_results import get_scan_results, get_latest_scan, list_scans, store_scan_results
+from engine.db.scan_results import get_scan_results, get_latest_scan, list_scans, store_scan_results, get_scan_topology
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class ScanUploadPayload(BaseModel):
     scan_path: str
     profile: str = "L1"
     checks: list[ScanCheckPayload]
+    topology: dict | None = None
 
 
 def _validate_scan_id(scan_id: str) -> None:
@@ -40,7 +41,7 @@ async def upload_scan(payload: ScanUploadPayload):
     """Receive scan results from a remote CLI and store them."""
     try:
         results = [{k: (v if v is not None else "") for k, v in c.model_dump().items()} for c in payload.checks]
-        scan_id = store_scan_results(results, payload.scan_path, payload.profile)
+        scan_id = store_scan_results(results, payload.scan_path, payload.profile, topology=payload.topology)
         return {"scan_id": scan_id, "stored": len(results)}
     except Exception:
         logger.exception("Failed to store uploaded scan")
@@ -63,8 +64,10 @@ async def latest_scan():
     try:
         results = get_latest_scan()
         if not results:
-            return {"scan_id": None, "results": []}
-        return {"scan_id": results[0]["scan_id"], "results": results}
+            return {"scan_id": None, "results": [], "topology": None}
+        scan_id = results[0]["scan_id"]
+        topology = get_scan_topology(scan_id)
+        return {"scan_id": scan_id, "results": results, "topology": topology}
     except Exception:
         logger.exception("Failed to fetch latest scan")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -78,7 +81,8 @@ async def scan_detail(scan_id: str):
         results = get_scan_results(scan_id)
         if not results:
             raise HTTPException(status_code=404, detail="Scan not found")
-        return {"scan_id": scan_id, "results": results}
+        topology = get_scan_topology(scan_id)
+        return {"scan_id": scan_id, "results": results, "topology": topology}
     except HTTPException:
         raise
     except Exception:

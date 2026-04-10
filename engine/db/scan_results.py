@@ -1,10 +1,11 @@
 """Scan result storage and retrieval."""
+import json as _json
 import uuid
 from datetime import datetime
 from engine.db.client import execute
 
 
-def store_scan_results(results: list[dict], openclaw_path: str, profile: str) -> str:
+def store_scan_results(results: list[dict], openclaw_path: str, profile: str, topology: dict | None = None) -> str:
     """Store scan results in ClickHouse. Returns the scan_id."""
     scan_id = str(uuid.uuid4())[:8]
     now = datetime.utcnow()
@@ -21,7 +22,31 @@ def store_scan_results(results: list[dict], openclaw_path: str, profile: str) ->
     ]
     if rows:
         execute("INSERT INTO scan_results VALUES", rows)
+    if topology:
+        store_scan_topology(scan_id, topology)
     return scan_id
+
+
+def store_scan_topology(scan_id: str, topology: dict) -> None:
+    """Store a topology JSON blob for a scan."""
+    execute(
+        "INSERT INTO scan_topology (scan_id, created_at, topology_json) VALUES",
+        [(scan_id, datetime.utcnow(), _json.dumps(topology, default=str))],
+    )
+
+
+def get_scan_topology(scan_id: str) -> dict | None:
+    """Retrieve the topology blob for a scan."""
+    rows = execute(
+        "SELECT topology_json FROM scan_topology WHERE scan_id = %(scan_id)s LIMIT 1",
+        {"scan_id": scan_id},
+    )
+    if not rows:
+        return None
+    try:
+        return _json.loads(rows[0][0])
+    except Exception:
+        return None
 
 
 def get_scan_results(scan_id: str) -> list[dict]:

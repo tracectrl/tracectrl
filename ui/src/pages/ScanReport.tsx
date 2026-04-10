@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
-import { fetchLatestScan, ScanResult } from '../api/scan'
+import { fetchLatestScan, ScanResult, ScanTopology } from '../api/scan'
+import ScanTopologyCanvas from '../components/ScanTopologyCanvas'
 
 type SortKey = 'check_id' | 'section' | 'severity' | 'title'
 
@@ -21,6 +22,7 @@ export default function ScanReport() {
   const [sortKey, setSortKey] = useState<SortKey>('severity')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  const [topology, setTopology] = useState<ScanTopology | null>(null)
 
   useEffect(() => { document.title = 'Scan Report \u2014 TraceCtrl' }, [])
 
@@ -31,6 +33,7 @@ export default function ScanReport() {
       .then(data => {
         setScanId(data.scan_id)
         setResults(data.results)
+        setTopology(data.topology ?? null)
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
@@ -77,6 +80,42 @@ export default function ScanReport() {
     }
     return { critical, high, medium, pass: passed }
   }, [results])
+
+  const SECTION_PREFIX_MAP: Record<string, string[]> = {
+    'Ingress': ['ingress:'],
+    'Tools': ['tool:'],
+    'LLM Providers': ['llm:'],
+    'Lateral Movement': ['subagent_surface:'],
+    'Persistence': ['scheduler:'],
+    'Plugins': ['extension:'],
+  }
+  const AGENT_SECTIONS = new Set(['Network', 'Guardrails', 'Credentials', 'Filesystem', 'Logging'])
+  const SEV_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1 }
+
+  const nodeRiskMap = useMemo(() => {
+    const map = new Map<string, string>()
+    if (!topology) return map
+    for (const r of results) {
+      if (r.passed === 1) continue
+      const sev = r.severity.toLowerCase()
+      const rank = SEV_RANK[sev] ?? 0
+      if (rank === 0) continue
+
+      const prefixes = SECTION_PREFIX_MAP[r.section]
+      const targets: string[] = []
+      if (prefixes) {
+        topology.nodes.filter(n => prefixes.some(p => n.id.startsWith(p))).forEach(n => targets.push(n.id))
+      }
+      if (AGENT_SECTIONS.has(r.section)) {
+        topology.nodes.filter(n => n.type === 'AGENT').forEach(n => targets.push(n.id))
+      }
+      for (const id of targets) {
+        const existing = SEV_RANK[map.get(id) ?? ''] ?? 0
+        if (rank > existing) map.set(id, sev)
+      }
+    }
+    return map
+  }, [results, topology])
 
   const meta = results.length > 0 ? results[0] : null
 
@@ -159,6 +198,17 @@ export default function ScanReport() {
               <div className="scan-severity-label">Pass</div>
             </div>
           </div>
+
+          {/* Topology visualization */}
+          {topology && topology.nodes.length > 0 && (
+            <div className="scan-topology-panel">
+              <div className="scan-topology-header">
+                <span>OpenClaw Architecture</span>
+                <span>{topology.nodes.length} nodes · {topology.edges.length} edges</span>
+              </div>
+              <ScanTopologyCanvas topology={topology} nodeRiskMap={nodeRiskMap} />
+            </div>
+          )}
 
           {/* Findings table */}
           <div className="sessions-list">

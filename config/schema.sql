@@ -122,3 +122,11 @@ CREATE TABLE IF NOT EXISTS tracectrl.scan_results (
     config_path    String
 ) ENGINE = MergeTree()
   ORDER BY (scan_id, check_id);
+
+-- Static topology snapshot per scan
+CREATE TABLE IF NOT EXISTS tracectrl.scan_topology (
+    scan_id       String,
+    created_at    DateTime,
+    topology_json String
+) ENGINE = ReplacingMergeTree(created_at)
+  ORDER BY scan_id;
