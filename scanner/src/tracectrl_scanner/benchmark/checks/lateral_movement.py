@@ -30,6 +30,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding=finding,
         remediation="Configure subagents.allowFrom with a list of permitted agent IDs to restrict lateral movement.",
         config_path="subagents.allowFrom",
+        rationale="Unrestricted sub-agent spawning lets a compromised agent create new agents with elevated privileges, enabling lateral movement across the system.",
     ))
 
     return results

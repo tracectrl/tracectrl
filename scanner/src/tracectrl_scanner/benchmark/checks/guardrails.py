@@ -33,6 +33,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding=finding,
         remediation="Create a SOUL.md file at agents/<agent_id>/agent/SOUL.md for each agent to define behavioral guardrails.",
         config_path="agents/<agent_id>/agent/SOUL.md",
+        rationale="Without a SOUL.md, the agent has no explicit behavioral boundaries, making it susceptible to prompt injection that overrides its purpose.",
     ))
 
     # OC-GUARD-002: Content filter should be enabled
@@ -50,6 +51,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding="Content filter is not enabled in agents.defaults.contentFilter or tools.contentFilter" if not filter_enabled else None,
         remediation="Enable content filtering by setting agents.defaults.contentFilter.enabled or tools.contentFilter.enabled to true.",
         config_path="agents.defaults.contentFilter.enabled",
+        rationale="Without content filtering, the agent can generate or relay harmful, toxic, or policy-violating content to end users.",
     ))
 
     return results

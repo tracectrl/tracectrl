@@ -19,19 +19,22 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
     results: list[CheckResult] = []
     tools_allow = _get_tools_allow(config)
 
-    # OC-TOOL-001: bash/shell must not be in tools.allow
-    has_shell = any(t in ("bash", "shell") for t in tools_allow)
+    # OC-TOOL-001: bash/shell/exec must not be in tools.allow
+    dangerous_tools = ("bash", "shell", "exec")
+    found_dangerous = [t for t in tools_allow if t in dangerous_tools]
+    has_dangerous = len(found_dangerous) > 0
     results.append(CheckResult(
         check_id="OC-TOOL-001",
         section="Tools",
-        title="Shell/bash tool is not permitted",
+        title="Shell/bash/exec tool is not permitted",
         severity=Severity.CRITICAL,
         profile=Profile.L1,
         assessment_type=AssessmentType.AUTOMATED,
-        passed=not has_shell,
-        finding="bash or shell is listed in tools.allow" if has_shell else None,
-        remediation="Remove \"bash\" and \"shell\" from tools.allow to prevent arbitrary command execution.",
+        passed=not has_dangerous,
+        finding=f"{', '.join(found_dangerous)} listed in tools.allow" if has_dangerous else None,
+        remediation="Remove \"bash\", \"shell\", and \"exec\" from tools.allow to prevent arbitrary command execution.",
         config_path="tools.allow",
+        rationale="bash/shell/exec tools enable arbitrary command execution on the host. An attacker who compromises the agent's prompt can run any system command.",
     ))
 
     # OC-TOOL-002: wildcard must not be in tools.allow
@@ -47,10 +50,11 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding="\"*\" wildcard found in tools.allow — all tools are permitted" if has_wildcard else None,
         remediation="Replace \"*\" in tools.allow with an explicit list of permitted tools.",
         config_path="tools.allow",
+        rationale="A wildcard grant permits every tool, including dangerous ones added later. Explicit allowlists enforce least-privilege.",
     ))
 
     # OC-TOOL-003: web_fetch requires allowedDomains
-    has_web_fetch = "web_fetch" in tools_allow
+    has_web_fetch = "web_fetch" in tools_allow or "*" in tools_allow
     if has_web_fetch:
         allowed_domains = (
             config.get("tools", {}).get("web", {}).get("fetch", {}).get("allowedDomains", [])
@@ -73,6 +77,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding=finding,
         remediation="Configure tools.web.fetch.allowedDomains with a list of permitted domains to prevent SSRF.",
         config_path="tools.web.fetch.allowedDomains",
+        rationale="Unrestricted web_fetch allows the agent to reach internal services (SSRF) or exfiltrate data to attacker-controlled URLs.",
     ))
 
     return results

@@ -29,6 +29,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding=finding,
         remediation="Restrict file permissions: chmod 600 openclaw.json",
         config_path="openclaw.json",
+        rationale="A world-readable config file exposes API keys and agent configuration to any local user or container sidecar.",
     ))
 
     # OC-FS-002: Credentials directory permissions
@@ -53,6 +54,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding=finding,
         remediation="Restrict directory permissions: chmod 700 credentials/",
         config_path="credentials/",
+        rationale="A world-readable credentials directory allows any local user to read stored secrets, tokens, and service account keys.",
     ))
 
     return results

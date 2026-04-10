@@ -32,6 +32,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding=finding,
         remediation="Add an openclaw.plugin.json manifest to each plugin directory under extensions/.",
         config_path="extensions/<plugin>/openclaw.plugin.json",
+        rationale="Plugins without manifests bypass version pinning and permission declarations, making supply-chain attacks harder to detect.",
     ))
 
     return results

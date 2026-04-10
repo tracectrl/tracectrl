@@ -110,4 +110,30 @@ def get_tracer_provider() -> TracerProvider:
             )
         trace.set_tracer_provider(_tracer_provider)
         _configured = True
+
+        # Quick reachability check — warn if the collector is down
+        if exporter and not _check_endpoint_reachable(_config.endpoint):
+            logger.warning(
+                f"TraceCtrl: OTel endpoint {_config.endpoint} is not reachable. "
+                "Spans will not be exported. Run 'tracectrl doctor' to diagnose."
+            )
+
         return _tracer_provider
+
+
+def _check_endpoint_reachable(endpoint: str) -> bool:
+    """Quick check if the OTel endpoint is reachable."""
+    import urllib.request
+    import urllib.error
+
+    try:
+        check_url = endpoint
+        if not check_url.startswith("http"):
+            check_url = f"http://{endpoint}"
+        req = urllib.request.Request(check_url, method="GET")
+        urllib.request.urlopen(req, timeout=2)
+        return True
+    except urllib.error.HTTPError:
+        return True  # 405 = endpoint exists
+    except Exception:
+        return False

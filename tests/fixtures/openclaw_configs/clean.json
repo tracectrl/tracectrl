@@ -19,7 +19,7 @@
     "defaults": {
       "workspace": "~/.openclaw/workspace",
       "model": { "primary": "anthropic/claude-sonnet-4-6" },
-      "tools": { "allow": ["web_fetch", "exec"] },
+      "tools": { "allow": ["web_fetch", "read_file"] },
       "contentFilter": { "enabled": true }
     },
     "list": [{ "id": "main", "default": true }]
@@ -36,7 +36,7 @@
   },
   "models": {
     "providers": {
-      "anthropic": { "apiKey": "${ANTHROPIC_API_KEY}" }
+      "anthropic": { "provider": "anthropic", "apiKey": "${ANTHROPIC_API_KEY}" }
     }
   },
   "session": { "scope": "per-sender", "maintenance": { "pruneAfter": "7d" } }

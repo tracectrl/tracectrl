@@ -29,3 +29,4 @@ class CheckResult:
     finding: Optional[str]
     remediation: str
     config_path: Optional[str] = None
+    rationale: Optional[str] = None  # WHY this matters — attack vector explanation

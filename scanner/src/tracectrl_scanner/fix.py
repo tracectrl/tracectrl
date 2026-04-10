@@ -30,27 +30,39 @@ def fix_tool_001(config: dict[str, Any]) -> str:
     """Remove bash and shell from tools.allow"""
     tools = config.get("agents", {}).get("defaults", {}).get("tools", {}).get("allow", [])
     removed = []
-    for dangerous in ("bash", "shell"):
-        if dangerous in tools:
+    for dangerous in ("bash", "shell", "exec"):
+        while dangerous in tools:
             tools.remove(dangerous)
             removed.append(dangerous)
     # Also check top-level
     top_tools = config.get("tools", {}).get("allow", [])
-    for dangerous in ("bash", "shell"):
-        if dangerous in top_tools:
+    for dangerous in ("bash", "shell", "exec"):
+        while dangerous in top_tools:
             top_tools.remove(dangerous)
             removed.append(dangerous)
+    # Also check per-agent tool lists
+    for agent in config.get("agents", {}).get("list", []):
+        agent_tools = agent.get("tools", {}).get("allow", [])
+        for dangerous in ("bash", "shell", "exec"):
+            while dangerous in agent_tools:
+                agent_tools.remove(dangerous)
+                removed.append(f"{dangerous} (agent: {agent.get('id', 'unknown')})")
     return f'Removed {", ".join(removed)} from tools.allow'
 
 @_register("OC-TOOL-002")
 def fix_tool_002(config: dict[str, Any]) -> str:
     """Remove wildcard from tools.allow"""
     tools = config.get("agents", {}).get("defaults", {}).get("tools", {}).get("allow", [])
-    if "*" in tools:
+    while "*" in tools:
         tools.remove("*")
     top_tools = config.get("tools", {}).get("allow", [])
-    if "*" in top_tools:
+    while "*" in top_tools:
         top_tools.remove("*")
+    # Also check per-agent tool lists
+    for agent in config.get("agents", {}).get("list", []):
+        agent_tools = agent.get("tools", {}).get("allow", [])
+        while "*" in agent_tools:
+            agent_tools.remove("*")
     return 'Removed "*" from tools.allow — add specific tools you need'
 
 @_register("OC-ING-001")
@@ -125,10 +137,17 @@ def apply_fixes(
             "description": description,
         })
 
-    # Write updated config
-    import json
-    with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
+    # Write updated config — prefer pyjson5 to preserve JSON5 compatibility,
+    # fall back to stdlib json (which strips comments)
+    try:
+        import pyjson5
+        with open(config_path, "w") as f:
+            f.write(pyjson5.dumps(config, indent=2))
+    except ImportError:
+        import json
+        console.print("[yellow]Note: Comments in openclaw.json will be removed during rewrite.[/yellow]")
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
 
     return applied
 

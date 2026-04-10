@@ -12,7 +12,9 @@ Usage:
 import argparse
 import json
 import sys
+import time
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 
@@ -116,6 +118,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
+    start_time = time.time()
+
     path = Path(args.path) if args.path else None
     profile = args.profile
 
@@ -143,6 +147,9 @@ def cmd_scan(args: argparse.Namespace) -> None:
     # --- JSON output -----------------------------------------------------------
     if args.json:
         payload = {
+            "version": "0.1.0",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "duration_seconds": round(time.time() - start_time, 3),
             "scan_path": str(root),
             "profile": profile,
             "checks": [dataclasses.asdict(r) for r in results],
@@ -208,7 +215,10 @@ def cmd_scan(args: argparse.Namespace) -> None:
         for r in findings:
             sv = sev_val(r)
             style = severity_style.get(sv, "")
-            table.add_row(r.check_id, f"[{style}]{sv}[/{style}]", r.finding or "")
+            finding_text = r.finding or ""
+            if hasattr(r, "rationale") and r.rationale:
+                finding_text += f"\n  [dim]{r.rationale}[/dim]"
+            table.add_row(r.check_id, f"[{style}]{sv}[/{style}]", finding_text)
 
         console.print(table)
         console.print()

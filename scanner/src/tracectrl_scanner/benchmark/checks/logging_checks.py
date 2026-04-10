@@ -20,6 +20,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding="logging.audit is not enabled" if audit_enabled is not True else None,
         remediation="Enable audit logging by setting logging.audit to true.",
         config_path="logging.audit",
+        rationale="Without audit logs, there is no forensic trail to detect or investigate agent misuse, prompt injection, or data exfiltration.",
     ))
 
     # OC-LOG-002: Log level should not be "debug" in production
@@ -36,6 +37,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding="logging.level is set to \"debug\" — may expose sensitive data in production" if is_debug else None,
         remediation="Set logging.level to \"info\" or \"warn\" for production deployments.",
         config_path="logging.level",
+        rationale="Debug-level logs often include full prompts, API keys, and user data, which can be captured by log aggregation systems.",
     ))
 
     return results

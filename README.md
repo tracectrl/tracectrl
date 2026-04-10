@@ -89,6 +89,24 @@ The dashboard is available at [http://localhost:3000](http://localhost:3000).
 
 For detailed setup options including the TUI wizard and development mode, see the [Quickstart Guide](https://docs.tracectrl.ai/quickstart).
 
+### Try It (30 seconds)
+
+After the stack is running, send test spans with the included demo agent:
+
+```bash
+pip install -e ./sdk/tracectrl
+python examples/demo_agent.py
+```
+
+Open [http://localhost:3000/sessions](http://localhost:3000/sessions) — you should see a "Demo Agent" trace with 4 spans (1 agent, 2 LLM, 1 tool).
+
+To scan an OpenClaw installation for security issues:
+
+```bash
+pip install -e ./scanner
+tracectrl scan ~/.openclaw/
+```
+
 ---
 
 ## Instrument Your Agent
