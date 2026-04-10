@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 import time
 from collections import Counter
@@ -100,6 +101,31 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     sys.exit(0 if all_ok else 1)
 
 
+def _upload_scan_results(engine_url: str, scan_path: str, profile: str, checks: list[dict]) -> None:
+    """Best-effort upload of scan results to the TraceCtrl engine."""
+    import urllib.request
+    import urllib.error
+
+    upload_payload = json.dumps({
+        "scan_path": scan_path,
+        "profile": profile,
+        "checks": checks,
+    }, default=str).encode("utf-8")
+
+    url = f"{engine_url}/api/v1/scans"
+    req = urllib.request.Request(url, data=upload_payload, method="POST")
+    req.add_header("Content-Type", "application/json")
+
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = json.loads(resp.read())
+            scan_id = body.get("scan_id", "unknown")
+            print(f"  Scan uploaded to engine (scan_id: {scan_id})")
+    except Exception as e:
+        print(f"  [warn] Could not upload scan to {url}: {e}")
+        print(f"         Use --json to export results manually.")
+
+
 def cmd_scan(args: argparse.Namespace) -> None:
     """Run an OpenClaw security scan."""
     import dataclasses
@@ -144,6 +170,14 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
     has_critical = summary["critical"] > 0
 
+    # --- Upload results to engine (best-effort) --------------------------------
+    checks_dicts = [dataclasses.asdict(r) for r in results]
+    engine_url = args.engine_url
+    no_upload = args.no_upload
+
+    if not no_upload:
+        _upload_scan_results(engine_url, str(root), profile, checks_dicts)
+
     # --- JSON output -----------------------------------------------------------
     if args.json:
         payload = {
@@ -152,7 +186,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
             "duration_seconds": round(time.time() - start_time, 3),
             "scan_path": str(root),
             "profile": profile,
-            "checks": [dataclasses.asdict(r) for r in results],
+            "checks": checks_dicts,
             "compound_risks": compound,
             "topology": {
                 "nodes": len(graph.nodes),
@@ -421,6 +455,17 @@ def main() -> None:
         choices=["L1", "L2"],
         default="L1",
         help="Scan profile level (default: L1)",
+    )
+    scan_parser.add_argument(
+        "--engine-url",
+        default=os.environ.get("TRACECTRL_ENGINE_URL", "http://localhost:8000"),
+        help="TraceCtrl engine URL for uploading results (env: TRACECTRL_ENGINE_URL, default: http://localhost:8000)",
+    )
+    scan_parser.add_argument(
+        "--no-upload",
+        action="store_true",
+        default=False,
+        help="Skip uploading results to the engine",
     )
 
     # --- fix -------------------------------------------------------------------

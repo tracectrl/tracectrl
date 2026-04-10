@@ -3,16 +3,46 @@ import logging
 import re
 
 from fastapi import APIRouter, HTTPException
-from engine.db.scan_results import get_scan_results, get_latest_scan, list_scans
+from pydantic import BaseModel
+from engine.db.scan_results import get_scan_results, get_latest_scan, list_scans, store_scan_results
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["scan"])
 
 
+class ScanCheckPayload(BaseModel):
+    check_id: str
+    section: str
+    title: str
+    severity: str
+    passed: bool
+    finding: str = ""
+    remediation: str = ""
+    config_path: str = ""
+
+
+class ScanUploadPayload(BaseModel):
+    scan_path: str
+    profile: str = "L1"
+    checks: list[ScanCheckPayload]
+
+
 def _validate_scan_id(scan_id: str) -> None:
     if not re.match(r'^[0-9a-f]{1,12}$', scan_id):
         raise HTTPException(status_code=400, detail="Invalid scan ID format")
+
+
+@router.post("/scans")
+async def upload_scan(payload: ScanUploadPayload):
+    """Receive scan results from a remote CLI and store them."""
+    try:
+        results = [c.model_dump() for c in payload.checks]
+        scan_id = store_scan_results(results, payload.scan_path, payload.profile)
+        return {"scan_id": scan_id, "stored": len(results)}
+    except Exception:
+        logger.exception("Failed to store uploaded scan")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/scans")
