@@ -129,7 +129,7 @@ def _discover_engine_url(openclaw_config: dict | None = None) -> str | None:
             try:
                 from urllib.parse import urlparse
                 parsed = urlparse(otel_endpoint)
-                if parsed.hostname and parsed.hostname != "localhost":
+                if parsed.hostname and parsed.hostname not in ("localhost", "127.0.0.1"):
                     candidates.append(f"http://{parsed.hostname}:8000")
             except Exception:
                 pass
@@ -197,7 +197,11 @@ def cmd_scan(args: argparse.Namespace) -> None:
     profile = args.profile
 
     # --- Discovery & parsing ---------------------------------------------------
-    root = discover(path)
+    try:
+        root = discover(path)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
     config = parse_config(root)
     agent_ids = list_agents(root)
 

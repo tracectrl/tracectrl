@@ -39,7 +39,7 @@ def _validate_scan_id(scan_id: str) -> None:
 async def upload_scan(payload: ScanUploadPayload):
     """Receive scan results from a remote CLI and store them."""
     try:
-        results = [{k: (v or "") for k, v in c.model_dump().items()} for c in payload.checks]
+        results = [{k: (v if v is not None else "") for k, v in c.model_dump().items()} for c in payload.checks]
         scan_id = store_scan_results(results, payload.scan_path, payload.profile)
         return {"scan_id": scan_id, "stored": len(results)}
     except Exception:
