@@ -25,11 +25,20 @@ async def latest_spans(service: str | None = None):
 
 
 @router.get("/sessions/{trace_id}/spans", response_model=list[SpanDetail])
-async def get_spans(trace_id: str):
+async def get_spans(trace_id: str, extra: str | None = None):
+    """Get spans for a trace. Pass extra=id1,id2 for merged OpenClaw sessions."""
     try:
         spans = get_trace_spans(trace_id)
+        # For merged OpenClaw sessions, also fetch spans from extra trace IDs
+        if extra:
+            for extra_id in extra.split(","):
+                extra_id = extra_id.strip()
+                if extra_id:
+                    spans.extend(get_trace_spans(extra_id))
         if not spans:
             raise HTTPException(status_code=404, detail="Trace not found")
+        # Sort all spans by timestamp
+        spans.sort(key=lambda s: s.get("start_ns", 0))
         return spans
     except HTTPException:
         raise

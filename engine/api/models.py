@@ -14,6 +14,7 @@ class SessionSummary(BaseModel):
     root_span_id: str
     agent_name: str
     has_error: bool
+    extra_trace_ids: list[str] | None = None
 
 
 class AgentSummary(BaseModel):

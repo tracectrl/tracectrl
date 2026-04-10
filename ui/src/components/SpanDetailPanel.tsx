@@ -13,6 +13,7 @@ function formatTimestamp(ns: number): string {
 
 function groupAttributes(attrs: Record<string, string>): { label: string; entries: [string, string][] }[] {
   const groups: Record<string, [string, string][]> = {
+    'OpenClaw': [],
     'TraceCtrl': [],
     'Input / Output': [],
     'OpenInference': [],
@@ -21,7 +22,8 @@ function groupAttributes(attrs: Record<string, string>): { label: string; entrie
 
   for (const [key, value] of Object.entries(attrs)) {
     if (!value) continue
-    if (key.startsWith('tracectrl.')) groups['TraceCtrl'].push([key, value])
+    if (key.startsWith('openclaw.')) groups['OpenClaw'].push([key, value])
+    else if (key.startsWith('tracectrl.')) groups['TraceCtrl'].push([key, value])
     else if (key.startsWith('input.') || key.startsWith('output.')) groups['Input / Output'].push([key, value])
     else if (key.startsWith('openinference.') || key.startsWith('oi.')) groups['OpenInference'].push([key, value])
     else groups['Other'].push([key, value])
@@ -88,6 +90,64 @@ export default function SpanDetailPanel({ span, onClose, inline }: SpanDetailPan
           </div>
         )}
       </div>
+
+      {/* OpenClaw model usage summary */}
+      {span.attributes['openclaw.model'] && (
+        <div className="mb-4">
+          <div className="detail-section-label">Model Usage</div>
+          <div className="kv-list">
+            <div className="kv-item">
+              <div className="kv-key">Model</div>
+              <div className="kv-value mono">{span.attributes['openclaw.model']}</div>
+            </div>
+            <div className="kv-item">
+              <div className="kv-key">Provider</div>
+              <div className="kv-value mono">{span.attributes['openclaw.provider']}</div>
+            </div>
+            <div className="kv-item">
+              <div className="kv-key">Tokens (in / out / total)</div>
+              <div className="kv-value mono">
+                {span.attributes['openclaw.tokens.input'] || '0'} / {span.attributes['openclaw.tokens.output'] || '0'} / {span.attributes['openclaw.tokens.total'] || '0'}
+              </div>
+            </div>
+            {span.attributes['openclaw.tokens.cache_read'] && (
+              <div className="kv-item">
+                <div className="kv-key">Cache (read / write)</div>
+                <div className="kv-value mono">
+                  {span.attributes['openclaw.tokens.cache_read']} / {span.attributes['openclaw.tokens.cache_write'] || '0'}
+                </div>
+              </div>
+            )}
+            <div className="kv-item">
+              <div className="kv-key">Channel</div>
+              <div className="kv-value">{span.attributes['openclaw.channel']}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OpenClaw message summary */}
+      {span.attributes['openclaw.outcome'] && !span.attributes['openclaw.model'] && (
+        <div className="mb-4">
+          <div className="detail-section-label">Message</div>
+          <div className="kv-list">
+            <div className="kv-item">
+              <div className="kv-key">Outcome</div>
+              <div className="kv-value">{span.attributes['openclaw.outcome']}</div>
+            </div>
+            <div className="kv-item">
+              <div className="kv-key">Channel</div>
+              <div className="kv-value">{span.attributes['openclaw.channel']}</div>
+            </div>
+            {span.attributes['openclaw.messageId'] && (
+              <div className="kv-item">
+                <div className="kv-key">Message ID</div>
+                <div className="kv-value mono">{span.attributes['openclaw.messageId']}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Input / Output blocks */}
       {inputValue && (

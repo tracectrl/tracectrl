@@ -61,7 +61,8 @@ export default function Sessions() {
     })
   }
 
-  const handleRowClick = useCallback((traceId: string) => {
+  const handleRowClick = useCallback((session: SessionSummary) => {
+    const traceId = session.trace_id
     if (expandedTraceId === traceId) {
       // Collapse
       setExpandedTraceId(null)
@@ -69,12 +70,15 @@ export default function Sessions() {
       setSelectedSpan(null)
       return
     }
-    // Expand
+    // Expand — for merged OpenClaw sessions, fetch spans from all trace IDs
     setExpandedTraceId(traceId)
     setExpandedLoading(true)
     setSelectedSpan(null)
-    fetchTraceSpans(traceId)
-      .then(setExpandedSpans)
+    const allTraceIds = session.extra_trace_ids && session.extra_trace_ids.length > 0
+      ? session.extra_trace_ids
+      : [traceId]
+    Promise.all(allTraceIds.map(tid => fetchTraceSpans(tid)))
+      .then(results => setExpandedSpans(results.flat()))
       .catch(() => setExpandedSpans([]))
       .finally(() => setExpandedLoading(false))
   }, [expandedTraceId])
@@ -160,7 +164,7 @@ export default function Sessions() {
                   return (
                     <React.Fragment key={session.trace_id}>
                       <tr
-                        onClick={() => handleRowClick(session.trace_id)}
+                        onClick={() => handleRowClick(session)}
                         style={{ cursor: 'pointer' }}
                         className={isExpanded ? 'selected' : ''}
                         aria-expanded={isExpanded}

@@ -10,6 +10,7 @@ export interface SessionSummary {
   root_span_id: string
   agent_name: string
   has_error: boolean
+  extra_trace_ids?: string[]
 }
 
 export interface SpanDetail {
@@ -40,8 +41,9 @@ export async function fetchSessions(service?: string | null): Promise<SessionSum
   return res.json()
 }
 
-export async function fetchTraceSpans(traceId: string): Promise<SpanDetail[]> {
-  const res = await fetch(`${ENGINE_URL}/api/v1/sessions/${traceId}/spans`)
+export async function fetchTraceSpans(traceId: string, extraTraceIds?: string[]): Promise<SpanDetail[]> {
+  const extra = extraTraceIds?.length ? `?extra=${extraTraceIds.join(',')}` : ''
+  const res = await fetch(`${ENGINE_URL}/api/v1/sessions/${traceId}/spans${extra}`)
   if (!res.ok) throw new Error(`Failed to fetch spans: ${res.statusText}`)
   return res.json()
 }
