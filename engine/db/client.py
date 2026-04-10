@@ -29,7 +29,10 @@ def execute(query: str, params=None):
 
 def ensure_schema() -> None:
     """Ensure all required tables exist. Safe to call on every startup."""
+    import re as _re
     db = os.getenv("CLICKHOUSE_DB", "tracectrl")
+    if not _re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', db):
+        raise ValueError(f"Invalid CLICKHOUSE_DB value: {db!r}")
     stmts = [
         f"CREATE DATABASE IF NOT EXISTS {db}",
         f"""CREATE TABLE IF NOT EXISTS {db}.agent_inventory (

@@ -75,7 +75,7 @@ export default function Sessions() {
     setExpandedLoading(true)
     setSelectedSpan(null)
     const allTraceIds = session.extra_trace_ids && session.extra_trace_ids.length > 0
-      ? session.extra_trace_ids
+      ? [traceId, ...session.extra_trace_ids]
       : [traceId]
     Promise.all(allTraceIds.map(tid => fetchTraceSpans(tid)))
       .then(results => setExpandedSpans(results.flat()))

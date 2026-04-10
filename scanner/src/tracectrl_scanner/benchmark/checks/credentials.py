@@ -70,8 +70,8 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
         finding = None
     else:
         if gitignore.exists():
-            gitignore_content = gitignore.read_text()
-            passed = ".env" in gitignore_content.splitlines() or ".env" in gitignore_content
+            lines = [line.strip() for line in gitignore.read_text().splitlines()]
+            passed = ".env" in lines or "/.env" in lines
             finding = ".env file exists but is not listed in .gitignore" if not passed else None
         else:
             passed = False

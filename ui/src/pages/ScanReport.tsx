@@ -45,8 +45,8 @@ export default function ScanReport() {
       if (sortKey === 'check_id') cmp = a.check_id.localeCompare(b.check_id)
       else if (sortKey === 'section') cmp = a.section.localeCompare(b.section)
       else if (sortKey === 'severity') {
-        const aOrd = a.passed ? 0 : (SEVERITY_ORDER[a.severity.toLowerCase()] || 0)
-        const bOrd = b.passed ? 0 : (SEVERITY_ORDER[b.severity.toLowerCase()] || 0)
+        const aOrd = a.passed === 1 ? 0 : (SEVERITY_ORDER[a.severity.toLowerCase()] || 0)
+        const bOrd = b.passed === 1 ? 0 : (SEVERITY_ORDER[b.severity.toLowerCase()] || 0)
         cmp = aOrd - bOrd
       }
       else if (sortKey === 'title') cmp = a.title.localeCompare(b.title)
@@ -66,16 +66,16 @@ export default function ScanReport() {
   }
 
   const counts = useMemo(() => {
-    let critical = 0, high = 0, medium = 0, pass = 0
+    let critical = 0, high = 0, medium = 0, passed = 0
     for (const r of results) {
-      if (r.passed) { pass++; continue }
+      if (r.passed === 1) { passed++; continue }
       const s = r.severity.toLowerCase()
       if (s === 'critical') critical++
       else if (s === 'high') high++
       else if (s === 'medium') medium++
-      else pass++
+      else passed++
     }
-    return { critical, high, medium, pass }
+    return { critical, high, medium, pass: passed }
   }, [results])
 
   const meta = results.length > 0 ? results[0] : null
@@ -211,7 +211,7 @@ export default function ScanReport() {
                           <td className="mono">{r.check_id}</td>
                           <td>{r.section}</td>
                           <td>
-                            {r.passed ? (
+                            {r.passed === 1 ? (
                               <span className="badge badge-low">PASS</span>
                             ) : (
                               <span className={`badge ${severityBadgeClass(r.severity)}`}>

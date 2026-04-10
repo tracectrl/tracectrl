@@ -1,9 +1,11 @@
 """Sessions API routes — session list and span tree."""
 
+import logging
 from fastapi import APIRouter, HTTPException
 from engine.db.sessions import get_session_list, get_trace_spans, get_latest_trace_spans
 from engine.api.models import SessionSummary, SpanDetail
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["sessions"])
 
 
@@ -11,8 +13,9 @@ router = APIRouter(tags=["sessions"])
 async def list_sessions(service: str | None = None):
     try:
         return get_session_list(service=service)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Internal error")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/sessions/latest-spans", response_model=list[SpanDetail])
@@ -20,8 +23,9 @@ async def latest_spans(service: str | None = None):
     """Returns spans from the most recent trace."""
     try:
         return get_latest_trace_spans(service=service)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Internal error")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/sessions/{trace_id}/spans", response_model=list[SpanDetail])
@@ -42,5 +46,6 @@ async def get_spans(trace_id: str, extra: str | None = None):
         return spans
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Internal error")
+        raise HTTPException(status_code=500, detail="Internal server error")

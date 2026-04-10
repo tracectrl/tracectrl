@@ -1,10 +1,12 @@
 """Topology API routes."""
 
+import logging
 from fastapi import APIRouter, HTTPException
 from engine.db.client import execute
 from engine.db.topology import get_topology_graph
 from engine.db.inventory import get_all_agents, get_agent_by_id
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["topology"])
 
 
@@ -20,8 +22,9 @@ async def topology_graph(service: str | None = None):
     """Returns the full topology graph: { nodes: [...], edges: [...] }"""
     try:
         return get_topology_graph(service=service)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to fetch topology graph")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/topology/agents/{agent_id}")

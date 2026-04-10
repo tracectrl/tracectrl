@@ -28,21 +28,25 @@ def fix_net_001(config: dict[str, Any]) -> str:
 @_register("OC-TOOL-001")
 def fix_tool_001(config: dict[str, Any]) -> str:
     """Remove bash and shell from tools.allow"""
-    tools = config.get("agents", {}).get("defaults", {}).get("tools", {}).get("allow", [])
     removed = []
+    # Use setdefault to ensure mutations propagate back to config
+    tools = (config.setdefault("agents", {})
+             .setdefault("defaults", {})
+             .setdefault("tools", {})
+             .setdefault("allow", []))
     for dangerous in ("bash", "shell", "exec"):
         while dangerous in tools:
             tools.remove(dangerous)
             removed.append(dangerous)
     # Also check top-level
-    top_tools = config.get("tools", {}).get("allow", [])
+    top_tools = config.setdefault("tools", {}).setdefault("allow", [])
     for dangerous in ("bash", "shell", "exec"):
         while dangerous in top_tools:
             top_tools.remove(dangerous)
             removed.append(dangerous)
     # Also check per-agent tool lists
     for agent in config.get("agents", {}).get("list", []):
-        agent_tools = agent.get("tools", {}).get("allow", [])
+        agent_tools = agent.setdefault("tools", {}).setdefault("allow", [])
         for dangerous in ("bash", "shell", "exec"):
             while dangerous in agent_tools:
                 agent_tools.remove(dangerous)
@@ -52,15 +56,18 @@ def fix_tool_001(config: dict[str, Any]) -> str:
 @_register("OC-TOOL-002")
 def fix_tool_002(config: dict[str, Any]) -> str:
     """Remove wildcard from tools.allow"""
-    tools = config.get("agents", {}).get("defaults", {}).get("tools", {}).get("allow", [])
+    tools = (config.setdefault("agents", {})
+             .setdefault("defaults", {})
+             .setdefault("tools", {})
+             .setdefault("allow", []))
     while "*" in tools:
         tools.remove("*")
-    top_tools = config.get("tools", {}).get("allow", [])
+    top_tools = config.setdefault("tools", {}).setdefault("allow", [])
     while "*" in top_tools:
         top_tools.remove("*")
     # Also check per-agent tool lists
     for agent in config.get("agents", {}).get("list", []):
-        agent_tools = agent.get("tools", {}).get("allow", [])
+        agent_tools = agent.setdefault("tools", {}).setdefault("allow", [])
         while "*" in agent_tools:
             agent_tools.remove("*")
     return 'Removed "*" from tools.allow — add specific tools you need'
@@ -91,9 +98,9 @@ def fix_log_001(config: dict[str, Any]) -> str:
 @_register("OC-LOG-002")
 def fix_log_002(config: dict[str, Any]) -> str:
     """Set log level to info if debug"""
-    logging = config.get("logging", {})
-    if logging.get("level") == "debug":
-        logging["level"] = "info"
+    logging_cfg = config.setdefault("logging", {})
+    if logging_cfg.get("level") == "debug":
+        logging_cfg["level"] = "info"
         return 'Set logging.level = "info" (was "debug")'
     return 'Log level already not debug'
 

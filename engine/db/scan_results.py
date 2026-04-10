@@ -9,17 +9,18 @@ def store_scan_results(results: list[dict], openclaw_path: str, profile: str) ->
     scan_id = str(uuid.uuid4())[:8]
     now = datetime.utcnow()
 
-    for r in results:
-        execute(
-            "INSERT INTO scan_results VALUES",
-            [(
-                scan_id, now, openclaw_path, profile,
-                r["check_id"], r["section"], r["title"],
-                r["severity"], 1 if r["passed"] else 0,
-                r.get("finding", ""), r.get("remediation", ""),
-                r.get("config_path", ""),
-            )],
+    rows = [
+        (
+            scan_id, now, openclaw_path, profile,
+            r["check_id"], r["section"], r["title"],
+            r["severity"], 1 if r["passed"] else 0,
+            r.get("finding", ""), r.get("remediation", ""),
+            r.get("config_path", ""),
         )
+        for r in results
+    ]
+    if rows:
+        execute("INSERT INTO scan_results VALUES", rows)
     return scan_id
 
 

@@ -5,9 +5,8 @@ COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
 
-# Vite env vars are baked at build time — pass via Docker build arg
-ARG VITE_ENGINE_URL=http://localhost:8000
-ENV VITE_ENGINE_URL=$VITE_ENGINE_URL
+# ENGINE_URL is derived at runtime from window.location.hostname (see api/config.ts)
+# No VITE_ENGINE_URL needed — the same image works on any host
 RUN npm run build
 
 FROM nginx:alpine

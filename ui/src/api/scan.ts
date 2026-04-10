@@ -20,7 +20,7 @@ export interface ScanResult {
   section: string
   title: string
   severity: string
-  passed: boolean
+  passed: number
   finding: string
   remediation: string
   config_path: string
