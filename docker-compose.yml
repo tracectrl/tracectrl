@@ -49,8 +49,6 @@ services:
   tracectrl-ui:
     build:
       context: ./ui
-      args:
-        - VITE_ENGINE_URL=http://localhost:8000
     ports:
       - "3000:3000"
     depends_on:

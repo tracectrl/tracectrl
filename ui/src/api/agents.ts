@@ -1,4 +1,4 @@
-const ENGINE_URL = import.meta.env.VITE_ENGINE_URL || 'http://localhost:8000'
+import { ENGINE_URL } from './config'
 
 export interface AgentSummary {
   agent_id: string

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { ENGINE_URL } from '../api/config'
 
 interface ProjectContextType {
   projects: string[]
@@ -24,7 +25,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const ENGINE_URL = import.meta.env.VITE_ENGINE_URL || 'http://localhost:8000'
     fetch(`${ENGINE_URL}/api/v1/projects`)
       .then(res => res.json())
       .then(setProjects)
