@@ -17,6 +17,12 @@ from .models import Edge, EdgeType, Node, NodeType, TopologyGraph
 # Channels that accept messages from the public internet.
 _INTERNET_CHANNELS = {"whatsapp", "telegram", "discord", "slack", "web", "api"}
 
+# Plugin names that are actually LLM providers (OpenClaw uses plugins for model access).
+_LLM_PLUGIN_NAMES = {
+    "anthropic", "openai", "google", "azure", "vllm", "ollama",
+    "groq", "mistral", "cohere", "together", "deepseek", "bedrock",
+}
+
 # Keys whose presence (with a truthy value) signals a channel is configured.
 _CHANNEL_CONFIG_SIGNALS = {"token", "bot_token", "api_key", "webhook_url", "app_id"}
 
@@ -233,36 +239,60 @@ def build(
                 )
             )
 
-    # -- 10. Extension nodes --------------------------------------------- #
-    # From plugins.entries in config
+    # -- 10. Extension / plugin nodes -------------------------------------- #
+    # Collect all plugin names from config (plugins.allow, plugins.entries) and disk
+    existing_node_ids = {n.id for n in graph.nodes}
+    extension_ids: list[str] = []
+
+    all_plugin_names: list[str] = []
     plugins_cfg: dict[str, Any] = config.get("plugins", {})
-    for entry in plugins_cfg.get("entries", []):
-        ext_name = entry if isinstance(entry, str) else (
+    for entry in plugins_cfg.get("entries", []) + plugins_cfg.get("allow", []):
+        name = entry if isinstance(entry, str) else (
             entry.get("name") if isinstance(entry, dict) else str(entry)
         )
-        if ext_name:
-            graph.nodes.append(
-                Node(
-                    id=f"extension:{ext_name}",
-                    type=NodeType.EXTENSION,
-                    label=ext_name,
-                )
-            )
+        if name:
+            all_plugin_names.append(name)
 
-    # From extensions/ directory on disk
     extensions_dir = openclaw_root / "extensions"
     if extensions_dir.is_dir():
         for child in sorted(extensions_dir.iterdir()):
             if child.is_dir() and not child.name.startswith("."):
-                ext_name = child.name
-                ext_id = f"extension:{ext_name}"
-                if not any(n.id == ext_id for n in graph.nodes):
-                    graph.nodes.append(
-                        Node(
-                            id=ext_id,
-                            type=NodeType.EXTENSION,
-                            label=ext_name,
-                        )
+                if child.name not in all_plugin_names:
+                    all_plugin_names.append(child.name)
+
+    for ext_name in all_plugin_names:
+        # Promote known LLM providers — skip if already exists as llm: node
+        if ext_name.lower() in _LLM_PLUGIN_NAMES:
+            llm_id = f"llm:{ext_name}"
+            if llm_id not in existing_node_ids:
+                graph.nodes.append(
+                    Node(id=llm_id, type=NodeType.LLM_PROVIDER, label=ext_name)
+                )
+                existing_node_ids.add(llm_id)
+                provider_ids.append(llm_id)
+                # Add agent → provider edges
+                for aid in resolved_agent_ids:
+                    etype = EdgeType.CALLS
+                    source = f"agent:{aid}"
+                    graph.edges.append(
+                        Edge(id=_edge_id(source, llm_id, etype.value), source=source, target=llm_id, type=etype)
                     )
+        else:
+            ext_id = f"extension:{ext_name}"
+            if ext_id not in existing_node_ids:
+                graph.nodes.append(
+                    Node(id=ext_id, type=NodeType.EXTENSION, label=ext_name)
+                )
+                existing_node_ids.add(ext_id)
+                extension_ids.append(ext_id)
+
+    # -- 11. Agent → Extension edges (uses) -------------------------------- #
+    for aid in resolved_agent_ids:
+        for ext_id in extension_ids:
+            etype = EdgeType.HOOKS_INTO
+            source = f"agent:{aid}"
+            graph.edges.append(
+                Edge(id=_edge_id(source, ext_id, etype.value), source=source, target=ext_id, type=etype)
+            )
 
     return graph
