@@ -101,10 +101,53 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     sys.exit(0 if all_ok else 1)
 
 
+def _discover_engine_url(openclaw_config: dict | None = None) -> str | None:
+    """Auto-discover a reachable TraceCtrl engine.
+
+    Priority:
+      1. TRACECTRL_ENGINE_URL env var
+      2. http://localhost:8000 (local engine)
+      3. Derive from OpenClaw's diagnostics-otel endpoint (same host, port 8000)
+    """
+    import urllib.request
+    import urllib.error
+
+    # Env var always wins
+    env_url = os.environ.get("TRACECTRL_ENGINE_URL")
+    if env_url:
+        return env_url
+
+    candidates = ["http://localhost:8000"]
+
+    # Derive from OpenClaw's OTEL endpoint — if it's sending to 10.103.253.224:4318,
+    # the engine is likely at 10.103.253.224:8000
+    if openclaw_config:
+        otel_endpoint = (openclaw_config.get("diagnostics", {})
+                         .get("otel", {})
+                         .get("endpoint", ""))
+        if otel_endpoint:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(otel_endpoint)
+                if parsed.hostname and parsed.hostname != "localhost":
+                    candidates.append(f"http://{parsed.hostname}:8000")
+            except Exception:
+                pass
+
+    for url in candidates:
+        try:
+            req = urllib.request.Request(f"{url}/api/v1/health", method="GET")
+            with urllib.request.urlopen(req, timeout=3):
+                return url
+        except Exception:
+            continue
+
+    return None
+
+
 def _upload_scan_results(engine_url: str, scan_path: str, profile: str, checks: list[dict]) -> None:
     """Best-effort upload of scan results to the TraceCtrl engine."""
     import urllib.request
-    import urllib.error
 
     upload_payload = json.dumps({
         "scan_path": scan_path,
@@ -120,7 +163,7 @@ def _upload_scan_results(engine_url: str, scan_path: str, profile: str, checks: 
         with urllib.request.urlopen(req, timeout=5) as resp:
             body = json.loads(resp.read())
             scan_id = body.get("scan_id", "unknown")
-            print(f"  Scan uploaded to engine (scan_id: {scan_id})")
+            print(f"  Scan uploaded to engine at {engine_url} (scan_id: {scan_id})")
     except Exception as e:
         print(f"  [warn] Could not upload scan to {url}: {e}")
         print(f"         Use --json to export results manually.")
@@ -172,11 +215,15 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
     # --- Upload results to engine (best-effort) --------------------------------
     checks_dicts = [dataclasses.asdict(r) for r in results]
-    engine_url = args.engine_url
     no_upload = args.no_upload
 
     if not no_upload:
-        _upload_scan_results(engine_url, str(root), profile, checks_dicts)
+        engine_url = args.engine_url or _discover_engine_url(config)
+        if engine_url:
+            _upload_scan_results(engine_url, str(root), profile, checks_dicts)
+        else:
+            print("  [info] No reachable TraceCtrl engine found — skipping upload.")
+            print("         Results are shown below. Use --json to export.")
 
     # --- JSON output -----------------------------------------------------------
     if args.json:
@@ -458,8 +505,8 @@ def main() -> None:
     )
     scan_parser.add_argument(
         "--engine-url",
-        default=os.environ.get("TRACECTRL_ENGINE_URL", "http://localhost:8000"),
-        help="TraceCtrl engine URL for uploading results (env: TRACECTRL_ENGINE_URL, default: http://localhost:8000)",
+        default=None,
+        help="TraceCtrl engine URL for uploading results (auto-discovers if omitted)",
     )
     scan_parser.add_argument(
         "--no-upload",
