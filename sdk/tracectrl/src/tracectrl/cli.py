@@ -149,9 +149,9 @@ def _upload_scan_results(engine_url: str, scan_path: str, profile: str, checks: 
     """Best-effort upload of scan results to the TraceCtrl engine."""
     import urllib.request
 
-    # Strip to only the fields the engine expects
+    # Strip to only the fields the engine expects, convert None → ""
     db_fields = {"check_id", "section", "title", "severity", "passed", "finding", "remediation", "config_path"}
-    clean_checks = [{k: v for k, v in c.items() if k in db_fields} for c in checks]
+    clean_checks = [{k: (v if v is not None else "") for k, v in c.items() if k in db_fields} for c in checks]
 
     upload_payload = json.dumps({
         "scan_path": scan_path,
