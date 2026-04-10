@@ -12,6 +12,8 @@ router = APIRouter(tags=["scan"])
 
 
 class ScanCheckPayload(BaseModel):
+    model_config = {"extra": "ignore"}
+
     check_id: str
     section: str
     title: str
