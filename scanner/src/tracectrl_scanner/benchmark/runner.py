@@ -3,11 +3,13 @@ from typing import Any
 from .models import CheckResult
 from .checks import (network, credentials, tools, ingress, guardrails,
                      filesystem, persistence, lateral_movement, plugins,
-                     llm_providers, logging_checks)
+                     llm_providers, logging_checks, security_advanced,
+                     operational, performance, compliance)
 
 ALL_CHECK_MODULES = [network, credentials, tools, ingress, guardrails,
                      filesystem, persistence, lateral_movement, plugins,
-                     llm_providers, logging_checks]
+                     llm_providers, logging_checks, security_advanced,
+                     operational, performance, compliance]
 
 def run_all(config: dict[str, Any], openclaw_root: Path) -> list[CheckResult]:
     results = []
