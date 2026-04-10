@@ -246,7 +246,11 @@ def build(
 
     all_plugin_names: list[str] = []
     plugins_cfg: dict[str, Any] = config.get("plugins", {})
-    for entry in plugins_cfg.get("entries", []) + plugins_cfg.get("allow", []):
+    raw_entries = plugins_cfg.get("entries", {})
+    entries_list = list(raw_entries.keys()) if isinstance(raw_entries, dict) else list(raw_entries)
+    raw_allow = plugins_cfg.get("allow", [])
+    allow_list = list(raw_allow) if isinstance(raw_allow, list) else []
+    for entry in entries_list + allow_list:
         name = entry if isinstance(entry, str) else (
             entry.get("name") if isinstance(entry, dict) else str(entry)
         )
