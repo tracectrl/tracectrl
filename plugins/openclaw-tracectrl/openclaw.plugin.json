@@ -1,0 +1,29 @@
+{
+  "id": "tracectrl",
+  "name": "TraceCtrl",
+  "description": "Security observability — rich traces, tool monitoring, and risk detection for AI agents",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "endpoint": {
+        "type": "string",
+        "description": "OTLP collector endpoint"
+      },
+      "serviceName": {
+        "type": "string",
+        "description": "Service name for traces"
+      },
+      "captureContent": {
+        "type": "boolean",
+        "description": "Capture message and tool content (privacy-sensitive)"
+      }
+    },
+    "additionalProperties": false
+  },
+  "uiHints": {
+    "endpoint": { "label": "Collector Endpoint", "placeholder": "http://localhost:4318" },
+    "serviceName": { "label": "Service Name", "placeholder": "openclaw-gateway" },
+    "captureContent": { "label": "Capture Content", "help": "Enable to capture message text and tool inputs/outputs" }
+  }
+}

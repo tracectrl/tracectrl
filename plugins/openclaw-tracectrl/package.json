@@ -1,0 +1,30 @@
+{
+  "name": "@tracectrl/openclaw-plugin",
+  "version": "0.1.0",
+  "description": "TraceCtrl security observability plugin for OpenClaw — rich telemetry for AI agent monitoring",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "tsc --noEmit"
+  },
+  "openclaw": {
+    "extensions": {
+      "tracectrl": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-node": "^1.25.0",
+    "@opentelemetry/sdk-metrics": "^1.25.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.52.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.52.0",
+    "@opentelemetry/resources": "^1.25.0",
+    "@opentelemetry/semantic-conventions": "^1.25.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "license": "Apache-2.0"
+}
