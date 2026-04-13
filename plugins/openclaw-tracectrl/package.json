@@ -10,9 +10,7 @@
     "lint": "npx tsc --noEmit"
   },
   "openclaw": {
-    "extensions": {
-      "tracectrl": "./dist/index.js"
-    }
+    "extensions": ["./dist/index.js"]
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
