@@ -1997,3 +1997,102 @@ h4 {
   background-image: radial-gradient(circle, var(--gray-800) 1px, transparent 1px);
   background-size: 24px 24px;
 }
+
+.scan-category {
+  border: 1px solid var(--dark-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+}
+
+.scan-category-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--dark-card);
+  cursor: pointer;
+  user-select: none;
+}
+
+.scan-category-header:hover {
+  background: var(--dark-surface);
+}
+
+.scan-category-name {
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 120px;
+}
+
+.scan-category-ratio {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--gray-400);
+}
+
+.scan-category-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--dark-border);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.scan-category-bar-fill {
+  height: 100%;
+  background: var(--risk-low);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.scan-category-chevron {
+  color: var(--gray-500);
+  font-size: 10px;
+  width: 16px;
+  text-align: center;
+}
+
+.scan-category-findings {
+  padding: var(--space-2) var(--space-4) var(--space-4);
+}
+
+.scan-finding-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--dark-border);
+  cursor: pointer;
+}
+
+.scan-finding-row:last-child {
+  border-bottom: none;
+}
+
+.scan-finding-id {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--gray-400);
+  min-width: 100px;
+}
+
+.scan-finding-title {
+  font-size: 13px;
+  flex: 1;
+}
+
+.scan-finding-detail {
+  padding: var(--space-2) 0 var(--space-2) calc(100px + var(--space-3) + 70px);
+  font-size: 13px;
+  color: var(--gray-400);
+}
+
+.scan-finding-remediation {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--dark-surface);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--risk-medium);
+}

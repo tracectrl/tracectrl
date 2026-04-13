@@ -1,10 +1,27 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { fetchLatestScan, ScanResult, ScanTopology } from '../api/scan'
 import ScanTopologyCanvas from '../components/ScanTopologyCanvas'
 
-type SortKey = 'check_id' | 'section' | 'severity' | 'title'
-
 const SEVERITY_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, pass: 0 }
+
+const CATEGORY_MAP: Record<string, string> = {
+  'Network': 'Security',
+  'Credentials': 'Security',
+  'Tools': 'Security',
+  'Ingress': 'Security',
+  'Guardrails': 'Security',
+  'Filesystem': 'Security',
+  'Lateral Movement': 'Security',
+  'Plugins': 'Security',
+  'LLM Providers': 'Security',
+  'Logging': 'Security',
+  'Security': 'Security',
+  'Operational': 'Operational',
+  'Performance': 'Performance',
+  'Compliance': 'Compliance',
+}
+
+const CATEGORY_ORDER = ['Security', 'Operational', 'Performance', 'Compliance']
 
 function severityBadgeClass(severity: string): string {
   const s = severity.toLowerCase()
@@ -14,15 +31,24 @@ function severityBadgeClass(severity: string): string {
   return 'badge-low'
 }
 
+interface CategoryGroup {
+  name: string
+  total: number
+  passed: number
+  failed: number
+  failedResults: ScanResult[]
+  passedResults: ScanResult[]
+}
+
 export default function ScanReport() {
   const [results, setResults] = useState<ScanResult[]>([])
   const [scanId, setScanId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [sortKey, setSortKey] = useState<SortKey>('severity')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [topology, setTopology] = useState<ScanTopology | null>(null)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+  const [showPassed, setShowPassed] = useState<Record<string, boolean>>({})
 
   useEffect(() => { document.title = 'Scan Report \u2014 TraceCtrl' }, [])
 
@@ -41,33 +67,6 @@ export default function ScanReport() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  const sorted = useMemo(() => {
-    const copy = [...results]
-    copy.sort((a, b) => {
-      let cmp = 0
-      if (sortKey === 'check_id') cmp = a.check_id.localeCompare(b.check_id)
-      else if (sortKey === 'section') cmp = a.section.localeCompare(b.section)
-      else if (sortKey === 'severity') {
-        const aOrd = a.passed === 1 ? 0 : (SEVERITY_ORDER[a.severity.toLowerCase()] || 0)
-        const bOrd = b.passed === 1 ? 0 : (SEVERITY_ORDER[b.severity.toLowerCase()] || 0)
-        cmp = aOrd - bOrd
-      }
-      else if (sortKey === 'title') cmp = a.title.localeCompare(b.title)
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-    return copy
-  }, [results, sortKey, sortDir])
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('desc') }
-  }
-
-  const sortIndicator = (key: SortKey) => {
-    if (sortKey !== key) return ''
-    return sortDir === 'asc' ? ' \u2191' : ' \u2193'
-  }
-
   const counts = useMemo(() => {
     let critical = 0, high = 0, medium = 0, passed = 0
     for (const r of results) {
@@ -80,6 +79,54 @@ export default function ScanReport() {
     }
     return { critical, high, medium, pass: passed }
   }, [results])
+
+  const categoryGroups = useMemo(() => {
+    const groupMap = new Map<string, { failed: ScanResult[]; passed: ScanResult[] }>()
+    for (const cat of CATEGORY_ORDER) {
+      groupMap.set(cat, { failed: [], passed: [] })
+    }
+
+    for (const r of results) {
+      const category = CATEGORY_MAP[r.section] ?? 'Security'
+      const group = groupMap.get(category)
+      if (!group) continue
+      if (r.passed === 1) {
+        group.passed.push(r)
+      } else {
+        group.failed.push(r)
+      }
+    }
+
+    // Sort failed by severity descending
+    const sortBySeverity = (a: ScanResult, b: ScanResult) => {
+      const aOrd = SEVERITY_ORDER[a.severity.toLowerCase()] ?? 0
+      const bOrd = SEVERITY_ORDER[b.severity.toLowerCase()] ?? 0
+      return bOrd - aOrd
+    }
+
+    const groups: CategoryGroup[] = []
+    for (const name of CATEGORY_ORDER) {
+      const g = groupMap.get(name)!
+      g.failed.sort(sortBySeverity)
+      groups.push({
+        name,
+        total: g.failed.length + g.passed.length,
+        passed: g.passed.length,
+        failed: g.failed.length,
+        failedResults: g.failed,
+        passedResults: g.passed,
+      })
+    }
+    return groups.filter(g => g.total > 0)
+  }, [results])
+
+  // Auto-expand categories that have failures
+  useEffect(() => {
+    const withFailures = categoryGroups
+      .filter(g => g.failed > 0)
+      .map(g => g.name)
+    setExpandedCategories(new Set(withFailures))
+  }, [categoryGroups])
 
   const SECTION_PREFIX_MAP: Record<string, string[]> = {
     'Ingress': ['ingress:'],
@@ -116,6 +163,19 @@ export default function ScanReport() {
     }
     return map
   }, [results, topology])
+
+  const toggleCategory = (name: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const toggleShowPassed = (category: string) => {
+    setShowPassed(prev => ({ ...prev, [category]: !prev[category] }))
+  }
 
   const meta = results.length > 0 ? results[0] : null
 
@@ -203,90 +263,111 @@ export default function ScanReport() {
           {topology && topology.nodes.length > 0 && (
             <div className="scan-topology-panel">
               <div className="scan-topology-header">
-                <span>OpenClaw Architecture</span>
+                <span>Architecture Risk View</span>
                 <span>{topology.nodes.length} nodes · {topology.edges.length} edges</span>
               </div>
               <ScanTopologyCanvas topology={topology} nodeRiskMap={nodeRiskMap} />
             </div>
           )}
 
-          {/* Findings table */}
-          <div className="sessions-list">
-            <div className="table-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th
-                      onClick={() => toggleSort('check_id')}
-                      style={{ cursor: 'pointer' }}
-                      aria-sort={sortKey === 'check_id' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      Check{sortIndicator('check_id')}
-                    </th>
-                    <th
-                      onClick={() => toggleSort('section')}
-                      style={{ cursor: 'pointer' }}
-                      aria-sort={sortKey === 'section' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      Section{sortIndicator('section')}
-                    </th>
-                    <th
-                      onClick={() => toggleSort('severity')}
-                      style={{ cursor: 'pointer' }}
-                      aria-sort={sortKey === 'severity' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      Severity{sortIndicator('severity')}
-                    </th>
-                    <th
-                      onClick={() => toggleSort('title')}
-                      style={{ cursor: 'pointer' }}
-                      aria-sort={sortKey === 'title' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      Title{sortIndicator('title')}
-                    </th>
-                    <th>Finding</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.map(r => {
-                    const rowKey = `${r.scan_id}-${r.check_id}`
-                    const isExpanded = expandedRow === rowKey
-                    return (
-                      <React.Fragment key={rowKey}>
-                        <tr
-                          onClick={() => setExpandedRow(isExpanded ? null : rowKey)}
-                          style={{ cursor: 'pointer' }}
-                          aria-expanded={isExpanded}
-                        >
-                          <td className="mono">{r.check_id}</td>
-                          <td>{r.section}</td>
-                          <td>
-                            {r.passed === 1 ? (
-                              <span className="badge badge-low">PASS</span>
-                            ) : (
+          {/* Category sections */}
+          <div style={{ marginTop: 'var(--space-6)' }}>
+            {categoryGroups.map(group => {
+              const expanded = expandedCategories.has(group.name)
+              const passRatio = group.total > 0 ? Math.round((group.passed / group.total) * 100) : 0
+
+              return (
+                <div className="scan-category" key={group.name}>
+                  <div
+                    className="scan-category-header"
+                    onClick={() => toggleCategory(group.name)}
+                    role="button"
+                    aria-expanded={expanded}
+                  >
+                    <span className="scan-category-name">{group.name}</span>
+                    <span className="scan-category-ratio">
+                      {group.passed}/{group.total} passed
+                    </span>
+                    <div className="scan-category-bar">
+                      <div
+                        className="scan-category-bar-fill"
+                        style={{ width: `${passRatio}%` }}
+                      />
+                    </div>
+                    <span className="scan-category-chevron">{expanded ? '\u25BC' : '\u25B6'}</span>
+                  </div>
+                  {expanded && (
+                    <div className="scan-category-findings">
+                      {group.failedResults.map(r => {
+                        const isRowExpanded = expandedRow === r.check_id
+                        return (
+                          <div key={r.check_id}>
+                            <div
+                              className="scan-finding-row"
+                              onClick={() => setExpandedRow(isRowExpanded ? null : r.check_id)}
+                            >
                               <span className={`badge ${severityBadgeClass(r.severity)}`}>
                                 {r.severity.toUpperCase()}
                               </span>
-                            )}
-                          </td>
-                          <td className="primary">{r.title}</td>
-                          <td>{r.finding}</td>
-                        </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={5} style={{ padding: 0 }}>
-                              <div className="scan-remediation">
-                                <strong>Remediation:</strong> {r.remediation || 'No remediation guidance available.'}
+                              <span className="scan-finding-id">{r.check_id}</span>
+                              <span className="scan-finding-title">{r.title}</span>
+                            </div>
+                            {isRowExpanded && (
+                              <div className="scan-finding-detail">
+                                <p>{r.finding}</p>
+                                {r.remediation && (
+                                  <p className="scan-finding-remediation">
+                                    {r.remediation}
+                                  </p>
+                                )}
                               </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {group.passed > 0 && (
+                        <>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => toggleShowPassed(group.name)}
+                            style={{ marginTop: 'var(--space-2)' }}
+                          >
+                            {showPassed[group.name]
+                              ? 'Hide passed'
+                              : `Show ${group.passed} passed checks`}
+                          </button>
+                          {showPassed[group.name] && group.passedResults.map(r => {
+                            const isRowExpanded = expandedRow === r.check_id
+                            return (
+                              <div key={r.check_id}>
+                                <div
+                                  className="scan-finding-row"
+                                  onClick={() => setExpandedRow(isRowExpanded ? null : r.check_id)}
+                                >
+                                  <span className="badge badge-low">PASS</span>
+                                  <span className="scan-finding-id">{r.check_id}</span>
+                                  <span className="scan-finding-title">{r.title}</span>
+                                </div>
+                                {isRowExpanded && (
+                                  <div className="scan-finding-detail">
+                                    <p>{r.finding}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </>
+                      )}
+                      {group.failedResults.length === 0 && !showPassed[group.name] && (
+                        <p style={{ fontSize: '13px', color: 'var(--gray-500)', margin: 0 }}>
+                          All checks passed.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </>
       )}

@@ -2,18 +2,28 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 import urllib.error
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 try:
     from textual.app import App, ComposeResult
     from textual.screen import Screen
-    from textual.widgets import Button, Input, Label, Static, RichLog, Select
+    from textual.widgets import (
+        Button, Input, Label, Static, RichLog, Select, DataTable,
+        LoadingIndicator,
+    )
     from textual.containers import Horizontal, Vertical
     from textual.binding import Binding
+    from textual.work import work
+    from textual.worker import Worker
+    from rich.text import Text
 except ImportError:
     print("Textual not installed. Run: pip install textual rich")
     sys.exit(1)
@@ -22,6 +32,51 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 REGISTER_URL = os.environ.get("TRACECTRL_REGISTER_URL", "https://tracectrl.ai/api/register")
 REGISTERED_FLAG = Path.home() / ".tracectrl_registered"
 
+SEVERITY_COLORS = {
+    "CRITICAL": "#FF4D4D",
+    "HIGH": "#FF6B35",
+    "MEDIUM": "#FFBB00",
+    "PASS": "#00CC66",
+    "MANUAL": "#8A8A8A",
+}
+
+CATEGORY_KEYWORDS = {
+    "Security": ["network", "credentials", "tools", "ingress", "guardrails",
+                 "filesystem", "lateral_movement", "plugins", "llm_providers",
+                 "security_advanced"],
+    "Operational": ["operational", "logging"],
+    "Performance": ["performance"],
+    "Compliance": ["compliance", "persistence"],
+}
+
+
+@dataclass
+class WizardState:
+    email: str = ""
+    user_type: str = ""
+    org_size: str = ""
+    role: str = ""
+    framework: str = ""
+    openclaw_path: Optional[Path] = None
+    scan_results: list = field(default_factory=list)
+    scan_root: Optional[Path] = None
+    project_name: str = "my-agent-service"
+    dashboard_url: str = "http://localhost:3000"
+
+
+def _classify_category(section: str) -> str:
+    """Map a check's section field to a UI category."""
+    lower = section.lower()
+    for cat, keywords in CATEGORY_KEYWORDS.items():
+        for kw in keywords:
+            if kw in lower:
+                return cat
+    return "Security"
+
+
+# ---------------------------------------------------------------------------
+# Screen 1: Welcome
+# ---------------------------------------------------------------------------
 
 class WelcomeScreen(Screen):
     """Screen 1: Welcome."""
@@ -46,10 +101,14 @@ class WelcomeScreen(Screen):
         if event.button.id == "btn-start":
             # Show registration if not already registered
             if REGISTERED_FLAG.exists():
-                self.app.push_screen(ConfigScreen())
+                self.app.push_screen(FrameworkScreen(self.app.state))
             else:
                 self.app.push_screen(RegistrationScreen())
 
+
+# ---------------------------------------------------------------------------
+# Screen 1.5: Registration
+# ---------------------------------------------------------------------------
 
 class RegistrationScreen(Screen):
     """Screen 1.5: Registration — collects user info to improve TraceCtrl."""
@@ -117,7 +176,7 @@ class RegistrationScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-skip":
-            self.app.push_screen(ConfigScreen())
+            self.app.push_screen(FrameworkScreen(self.app.state))
         elif event.button.id == "btn-register":
             self._submit_registration()
 
@@ -142,6 +201,13 @@ class RegistrationScreen(Screen):
         if not role:
             self.notify("Please select your role", severity="error")
             return
+
+        # Store in state
+        state = self.app.state
+        state.email = email
+        state.user_type = user_type
+        state.role = role
+        state.org_size = org_size or ""
 
         # Get version
         try:
@@ -179,120 +245,577 @@ class RegistrationScreen(Screen):
             pass
 
         self.notify("Thanks for registering!", severity="information")
-        self.app.push_screen(ConfigScreen())
+        self.app.push_screen(FrameworkScreen(self.app.state))
 
 
-class ConfigScreen(Screen):
-    """Screen 2: Configuration form."""
+# ---------------------------------------------------------------------------
+# Screen 2: Framework choice
+# ---------------------------------------------------------------------------
+
+class FrameworkScreen(Screen):
+    """Choose between OpenClaw and Strands agent frameworks."""
+
+    def __init__(self, state: WizardState):
+        super().__init__()
+        self.state = state
 
     def compose(self) -> ComposeResult:
-        yield Static("\n  Configuration\n", id="config-title")
-        yield Label("Service Name")
-        yield Input(value="my-agent-service", id="service_name")
-        yield Label("OTel Collector Endpoint")
-        yield Input(value="http://localhost:4317", id="endpoint")
-        yield Label("Pipeline Interval (seconds)")
-        yield Input(value="60", id="interval")
-        yield Static("")
-        yield Button("Review →", id="btn-review", variant="primary")
+        yield Static("\n  Choose Your Agent Framework\n", id="framework-title")
+        yield Static(
+            "  TraceCtrl supports multiple agent frameworks.\n"
+            "  Select the one you're using to tailor the setup experience.\n",
+            id="framework-subtitle",
+        )
+        yield Vertical(
+            Button("OpenClaw", id="btn-openclaw", variant="primary"),
+            Button("Strands (AWS Bedrock)", id="btn-strands", variant="primary"),
+            id="framework-buttons",
+        )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-review":
-            config = {
-                "service_name": self.query_one("#service_name", Input).value,
-                "endpoint": self.query_one("#endpoint", Input).value,
-                "interval": self.query_one("#interval", Input).value,
-            }
-            self.app.push_screen(ConfirmScreen(config))
+        if event.button.id == "btn-openclaw":
+            self.state.framework = "openclaw"
+            self.app.push_screen(OpenClawPathScreen(self.state))
+        elif event.button.id == "btn-strands":
+            self.state.framework = "strands"
+            self.app.push_screen(StrandsActionScreen(self.state))
 
 
-class ConfirmScreen(Screen):
-    """Screen 3: Review .env before writing."""
+# ---------------------------------------------------------------------------
+# Screen 3a: OpenClaw path input
+# ---------------------------------------------------------------------------
 
-    def __init__(self, config: dict):
+class OpenClawPathScreen(Screen):
+    """Input and validate the OpenClaw installation path."""
+
+    def __init__(self, state: WizardState):
         super().__init__()
-        self.config = config
+        self.state = state
 
     def compose(self) -> ComposeResult:
-        env_content = self._build_env()
-        yield Static("\n  Review your .env\n", id="confirm-title")
-        yield Static(env_content, id="env-preview")
+        yield Static("\n  OpenClaw Installation Path\n", id="ocpath-title")
+        yield Static(
+            "  Point us at your OpenClaw directory so we can scan its configuration.\n",
+            id="ocpath-subtitle",
+        )
+        yield Label("Path to OpenClaw root")
+        yield Input(value="~/.openclaw/", id="ocpath-input", placeholder="~/.openclaw/")
+        yield Static("", id="ocpath-status")
         yield Static("")
         yield Horizontal(
             Button("← Back", id="btn-back"),
-            Button("Write .env & Launch →", id="btn-launch", variant="primary"),
+            Button("Next →", id="btn-next", variant="primary", disabled=True),
         )
 
-    def _build_env(self) -> str:
-        return (
-            f"# Generated by TraceCtrl TUI\n"
-            f"TRACECTRL_ENDPOINT={self.config['endpoint']}\n"
-            f"TRACECTRL_SERVICE_NAME={self.config['service_name']}\n"
-            f"TRACECTRL_FAIL_SILENTLY=true\n"
-            f"\n"
-            f"CLICKHOUSE_HOST=clickhouse\n"
-            f"CLICKHOUSE_PORT=9000\n"
-            f"CLICKHOUSE_DB=tracectrl\n"
-            f"PIPELINE_INTERVAL_SECONDS={self.config['interval']}\n"
-            f"\n"
-            f"ENGINE_URL=http://tracectrl-engine:8000\n"
-            f"VITE_ENGINE_URL=http://localhost:8000\n"
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "ocpath-input":
+            return
+        raw = event.value.strip()
+        status_widget = self.query_one("#ocpath-status", Static)
+        next_btn = self.query_one("#btn-next", Button)
+
+        if not raw:
+            status_widget.update("  Enter a path to continue")
+            next_btn.disabled = True
+            return
+
+        expanded = Path(raw).expanduser().resolve()
+        if not expanded.is_dir():
+            status_widget.update("  [#FF4D4D]✗[/] Directory does not exist")
+            next_btn.disabled = True
+            return
+
+        config_file = expanded / "openclaw.json"
+        if not config_file.is_file():
+            status_widget.update(
+                f"  [#FFBB00]⚠[/] Directory exists but openclaw.json not found"
+            )
+            next_btn.disabled = True
+            return
+
+        status_widget.update(f"  [#00CC66]✓[/] Found openclaw.json at {expanded}")
+        self.state.openclaw_path = expanded
+        next_btn.disabled = False
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-back":
+            self.app.pop_screen()
+        elif event.button.id == "btn-next":
+            self.app.push_screen(OpenClawActionScreen(self.state))
+
+
+# ---------------------------------------------------------------------------
+# Screen 3b: OpenClaw action choice
+# ---------------------------------------------------------------------------
+
+class OpenClawActionScreen(Screen):
+    """Choose to scan OpenClaw or skip directly to trace exploration."""
+
+    def __init__(self, state: WizardState):
+        super().__init__()
+        self.state = state
+
+    def compose(self) -> ComposeResult:
+        yield Static("\n  OpenClaw Setup\n", id="ocaction-title")
+        yield Static(
+            f"  Validated path: {self.state.openclaw_path}\n",
+            id="ocaction-path",
+        )
+        yield Static(
+            "  You can scan your OpenClaw configuration for security issues,\n"
+            "  or skip ahead to explore traces in the dashboard.\n",
+            id="ocaction-subtitle",
+        )
+        yield Vertical(
+            Button("Scan OpenClaw", id="btn-scan", variant="primary"),
+            Button("Run & Explore Traces →", id="btn-explore", variant="primary"),
+            id="ocaction-buttons",
+        )
+        yield Static("")
+        yield Button("← Back", id="btn-back")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-back":
+            self.app.pop_screen()
+        elif event.button.id == "btn-scan":
+            self.app.push_screen(ScanScreen(self.state))
+        elif event.button.id == "btn-explore":
+            self.app.push_screen(ProjectScreen(self.state))
+
+
+# ---------------------------------------------------------------------------
+# Screen 4: Scanner
+# ---------------------------------------------------------------------------
+
+class ScanScreen(Screen):
+    """Run the TraceCtrl scanner against OpenClaw and display results."""
+
+    def __init__(self, state: WizardState):
+        super().__init__()
+        self.state = state
+        self._active_filter = "All"
+
+    def compose(self) -> ComposeResult:
+        yield Static("\n  OpenClaw Security Scan\n", id="scan-title")
+        yield Static("", id="scan-summary")
+        yield LoadingIndicator(id="scan-loading")
+        yield Horizontal(
+            Button("All", id="tab-all", variant="primary"),
+            Button("Security", id="tab-security"),
+            Button("Operational", id="tab-operational"),
+            Button("Performance", id="tab-performance"),
+            Button("Compliance", id="tab-compliance"),
+            id="scan-tabs",
+        )
+        yield DataTable(id="scan-table", cursor_type="row", zebra_stripes=True)
+        yield RichLog(id="scan-fix-log", highlight=True, markup=True)
+        yield Static(
+            "  Results also accessible at web UI after setup.\n",
+            id="scan-note",
+        )
+        yield Horizontal(
+            Button("← Back", id="btn-back"),
+            Button("Fix & Rescan", id="btn-fix", variant="warning", disabled=True),
+            Button("Continue to Setup →", id="btn-continue", variant="primary", disabled=True),
+            id="scan-actions",
+        )
+
+    def on_mount(self) -> None:
+        table = self.query_one("#scan-table", DataTable)
+        table.add_columns("Check ID", "Severity", "Category", "Finding")
+        # Hide elements initially
+        self.query_one("#scan-tabs").display = False
+        self.query_one("#scan-table").display = False
+        self.query_one("#scan-fix-log").display = False
+        self.query_one("#scan-note").display = False
+        self._run_scan()
+
+    @work(thread=True, exclusive=True)
+    def _run_scan(self) -> None:
+        from tracectrl_scanner.discovery import discover
+        from tracectrl_scanner.parser import parse_config
+        from tracectrl_scanner.benchmark.runner import run_all
+
+        root = discover(self.state.openclaw_path)
+        config = parse_config(root)
+        results = run_all(config, root)
+        self.state.scan_results = results
+        self.state.scan_root = root
+        self.call_from_thread(self._show_results, results)
+
+    def _show_results(self, results: list) -> None:
+        # Hide loading
+        self.query_one("#scan-loading").display = False
+        # Show results UI
+        self.query_one("#scan-tabs").display = True
+        self.query_one("#scan-table").display = True
+        self.query_one("#scan-note").display = True
+
+        # Build summary
+        counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "PASS": 0, "MANUAL": 0}
+        for r in results:
+            counts[r.severity.value] = counts.get(r.severity.value, 0) + 1
+
+        summary_parts = []
+        for sev in ["CRITICAL", "HIGH", "MEDIUM", "PASS"]:
+            color = SEVERITY_COLORS[sev]
+            summary_parts.append(f"[{color}]{sev} {counts[sev]}[/]")
+        summary_line = "  " + "  |  ".join(summary_parts)
+        self.query_one("#scan-summary", Static).update(summary_line)
+
+        # Enable buttons
+        has_failures = any(not r.passed for r in results)
+        self.query_one("#btn-fix", Button).disabled = not has_failures
+        self.query_one("#btn-continue", Button).disabled = False
+
+        # Populate table
+        self._populate_table(results)
+
+    def _populate_table(self, results: list, category_filter: str = "All") -> None:
+        table = self.query_one("#scan-table", DataTable)
+        table.clear()
+        for r in results:
+            cat = _classify_category(r.section)
+            if category_filter != "All" and cat != category_filter:
+                continue
+            sev_color = SEVERITY_COLORS.get(r.severity.value, "#F5F5F5")
+            sev_text = Text(r.severity.value, style=sev_color)
+            finding_text = r.finding or ("PASS" if r.passed else r.title)
+            table.add_row(
+                r.check_id,
+                sev_text,
+                cat,
+                finding_text,
+            )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        btn_id = event.button.id
+
+        if btn_id == "btn-back":
+            self.app.pop_screen()
+            return
+
+        if btn_id == "btn-continue":
+            self.app.push_screen(ProjectScreen(self.state))
+            return
+
+        if btn_id == "btn-fix":
+            self.query_one("#scan-fix-log").display = True
+            self.query_one("#scan-loading").display = True
+            self.query_one("#btn-fix", Button).disabled = True
+            self._run_fix_rescan()
+            return
+
+        # Tab buttons
+        tab_map = {
+            "tab-all": "All",
+            "tab-security": "Security",
+            "tab-operational": "Operational",
+            "tab-performance": "Performance",
+            "tab-compliance": "Compliance",
+        }
+        if btn_id in tab_map:
+            self._active_filter = tab_map[btn_id]
+            # Update tab button styles
+            for tid, _ in tab_map.items():
+                btn = self.query_one(f"#{tid}", Button)
+                btn.variant = "primary" if tid == btn_id else "default"
+            self._populate_table(self.state.scan_results, self._active_filter)
+
+    @work(thread=True, exclusive=True)
+    def _run_fix_rescan(self) -> None:
+        from tracectrl_scanner.parser import parse_config
+        from tracectrl_scanner.benchmark.runner import run_all
+        from tracectrl_scanner.fix import get_automatable_fixes, apply_fixes
+
+        config_path = self.state.scan_root / "openclaw.json"
+        config = parse_config(self.state.scan_root)
+        automatable, manual = get_automatable_fixes(self.state.scan_results)
+        applied = apply_fixes(config, config_path, automatable)
+
+        # Log each fix
+        for fix in applied:
+            self.call_from_thread(
+                self._log_fix,
+                f"[#00CC66]✓[/] {fix['check_id']}: {fix['description']}",
+            )
+
+        if manual:
+            self.call_from_thread(
+                self._log_fix,
+                f"[#FFBB00]![/] {len(manual)} finding(s) require manual remediation",
+            )
+
+        # Re-scan
+        new_config = parse_config(self.state.scan_root)
+        new_results = run_all(new_config, self.state.scan_root)
+        self.state.scan_results = new_results
+        self.call_from_thread(self._show_results, new_results)
+
+    def _log_fix(self, message: str) -> None:
+        log = self.query_one("#scan-fix-log", RichLog)
+        log.write(message)
+
+
+# ---------------------------------------------------------------------------
+# Screen 3s: Strands action
+# ---------------------------------------------------------------------------
+
+class StrandsActionScreen(Screen):
+    """Strands framework — skip to trace exploration."""
+
+    def __init__(self, state: WizardState):
+        super().__init__()
+        self.state = state
+
+    def compose(self) -> ComposeResult:
+        yield Static("\n  Strands Agent Framework\n", id="strands-title")
+        yield Static(
+            "  Strands (AWS Bedrock) agents emit OpenTelemetry traces that TraceCtrl\n"
+            "  can ingest and visualize. Set up the TraceCtrl stack and point your\n"
+            "  Strands agent's OTel exporter at the collector endpoint.\n",
+            id="strands-subtitle",
+        )
+        yield Static(
+            "  After setup you'll have:\n"
+            "    - A ClickHouse database for trace storage\n"
+            "    - The TraceCtrl engine for risk scoring and analytics\n"
+            "    - A dashboard at http://localhost:3000\n"
+            "    - An OTel collector on port 4318 (HTTP) / 4317 (gRPC)\n",
+            id="strands-info",
+        )
+        yield Static("")
+        yield Horizontal(
+            Button("← Back", id="btn-back"),
+            Button("Run & Explore Traces →", id="btn-explore", variant="primary"),
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-back":
+            self.app.pop_screen()
+        elif event.button.id == "btn-explore":
+            self.app.push_screen(ProjectScreen(self.state))
+
+
+# ---------------------------------------------------------------------------
+# Screen 5: Project name & .env
+# ---------------------------------------------------------------------------
+
+class ProjectScreen(Screen):
+    """Name the project and preview what will be written."""
+
+    def __init__(self, state: WizardState):
+        super().__init__()
+        self.state = state
+
+    def compose(self) -> ComposeResult:
+        yield Static("\n  Name Your Project\n", id="project-title")
+        yield Label("Project / service name")
+        yield Input(
+            value=self.state.project_name,
+            id="project-name-input",
+            placeholder="my-agent-service",
+        )
+        yield Static(
+            "\n  This will:\n"
+            "    1. Write a .env file with your project settings\n"
+            "    2. Start 4 Docker services:\n"
+            "       - ClickHouse  (trace storage)\n"
+            "       - TraceCtrl Engine  (risk scoring API)\n"
+            "       - TraceCtrl UI  (dashboard)\n"
+            "       - OTel Collector  (trace ingestion)\n",
+            id="project-preview",
+        )
+        yield Static("")
+        yield Horizontal(
+            Button("← Back", id="btn-back"),
+            Button("Launch TraceCtrl →", id="btn-launch", variant="primary"),
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-back":
             self.app.pop_screen()
         elif event.button.id == "btn-launch":
-            env_path = REPO_ROOT / ".env"
-            env_path.write_text(self._build_env())
-            self.app.push_screen(LaunchScreen())
+            name = self.query_one("#project-name-input", Input).value.strip()
+            if not name:
+                self.notify("Please enter a project name", severity="error")
+                return
+            self.state.project_name = name
+            self._write_env()
+            self.app.push_screen(DockerScreen(self.state))
+
+    def _write_env(self) -> None:
+        state = self.state
+        env_content = (
+            f"# Generated by TraceCtrl TUI\n"
+            f"TRACECTRL_SERVICE_NAME={state.project_name}\n"
+            f"CLICKHOUSE_HOST=clickhouse\n"
+            f"CLICKHOUSE_PORT=9000\n"
+            f"CLICKHOUSE_DB=tracectrl\n"
+            f"PIPELINE_INTERVAL_SECONDS=60\n"
+            f"\n"
+            f"ENGINE_URL=http://tracectrl-engine:8000\n"
+            f"VITE_ENGINE_URL=http://localhost:8000\n"
+        )
+        env_path = REPO_ROOT / ".env"
+        env_path.write_text(env_content)
 
 
-class LaunchScreen(Screen):
-    """Screen 4: Docker Compose launch with live output."""
+# ---------------------------------------------------------------------------
+# Screen 6: Docker launch
+# ---------------------------------------------------------------------------
+
+class DockerScreen(Screen):
+    """Launch Docker Compose and poll service health."""
+
+    HEALTH_ENDPOINTS = [
+        ("ClickHouse", "http://localhost:8123", "/"),
+        ("Engine", "http://localhost:8000", "/health"),
+        ("UI", "http://localhost:3000", "/"),
+        ("Collector", "http://localhost:4318", "/"),
+    ]
+
+    def __init__(self, state: WizardState):
+        super().__init__()
+        self.state = state
+        self._healthy_services: set[str] = set()
 
     def compose(self) -> ComposeResult:
-        yield Static("\n  Launching TraceCtrl...\n", id="launch-title")
-        yield RichLog(id="launch-log", highlight=True, markup=True)
-        yield Button("Done", id="btn-done", variant="primary")
+        yield Static("\n  Launching TraceCtrl\n", id="docker-title")
+        yield RichLog(id="docker-log", highlight=True, markup=True)
+        yield Static("", id="docker-health")
+        yield Button("Open Dashboard →", id="btn-dashboard", variant="primary", disabled=True)
+        yield Button("Done — Exit Setup", id="btn-done")
 
     def on_mount(self) -> None:
-        log = self.query_one("#launch-log", RichLog)
+        log = self.query_one("#docker-log", RichLog)
         log.write("[bold green]✓[/] .env written successfully")
         log.write(f"[bold]Working directory:[/] {REPO_ROOT}")
-        log.write("[bold]Running:[/] docker compose up -d\n")
 
+        if not shutil.which("docker"):
+            log.write(
+                "[bold yellow]⚠ Docker not found.[/]\n"
+                "  Install Docker and run 'docker compose up -d' manually.\n"
+                f"  Then visit {self.state.dashboard_url}"
+            )
+            self.query_one("#btn-dashboard", Button).disabled = False
+            return
+
+        log.write("[bold]Running:[/] docker compose up -d\n")
+        self._run_docker()
+
+    @work(thread=True, exclusive=True)
+    def _run_docker(self) -> None:
         try:
-            result = subprocess.run(
+            proc = subprocess.Popen(
                 ["docker", "compose", "up", "-d"],
                 cwd=REPO_ROOT,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                timeout=120,
             )
-            if result.stdout:
-                for line in result.stdout.strip().split("\n"):
-                    log.write(line)
-            if result.stderr:
-                for line in result.stderr.strip().split("\n"):
-                    log.write(line)
+            for line in proc.stdout:
+                self.call_from_thread(self._log, line.rstrip())
+            proc.wait(timeout=180)
 
-            if result.returncode == 0:
-                log.write("\n[bold green]✓ All services launched![/]")
-                log.write("\n[bold]Dashboard:[/] http://localhost:3000")
-                log.write("[bold]Engine API:[/] http://localhost:8000")
-                log.write("[bold]OTel Collector:[/] http://localhost:4317 (gRPC) / :4318 (HTTP)")
+            if proc.returncode == 0:
+                self.call_from_thread(self._on_compose_success)
             else:
-                log.write(f"\n[bold red]✗ docker compose exited with code {result.returncode}[/]")
-        except FileNotFoundError:
-            log.write("[bold yellow]⚠ Docker not found. Install Docker and run 'docker compose up -d' manually.[/]")
+                self.call_from_thread(
+                    self._log,
+                    f"[bold red]✗ docker compose exited with code {proc.returncode}[/]",
+                )
         except subprocess.TimeoutExpired:
-            log.write("[bold yellow]⚠ Timeout waiting for docker compose. Check manually.[/]")
+            self.call_from_thread(
+                self._log,
+                "[bold yellow]⚠ Timeout waiting for docker compose. Check manually.[/]",
+            )
+        except FileNotFoundError:
+            self.call_from_thread(
+                self._log,
+                "[bold yellow]⚠ Docker not found. Install Docker and run 'docker compose up -d' manually.[/]",
+            )
+
+    def _log(self, message: str) -> None:
+        self.query_one("#docker-log", RichLog).write(message)
+
+    def _on_compose_success(self) -> None:
+        self._log("[bold green]✓ Docker Compose started successfully[/]")
+        self._log("\n[bold]Polling service health...[/]\n")
+        self._poll_health()
+
+    @work(thread=True, exclusive=True)
+    def _poll_health(self) -> None:
+        max_attempts = 30
+        for attempt in range(max_attempts):
+            all_healthy = True
+            for name, base_url, path in self.HEALTH_ENDPOINTS:
+                if name in self._healthy_services:
+                    continue
+                try:
+                    url = f"{base_url}{path}"
+                    req = urllib.request.Request(url, method="GET")
+                    resp = urllib.request.urlopen(req, timeout=3)
+                    if resp.status < 400:
+                        self._healthy_services.add(name)
+                        self.call_from_thread(
+                            self._log,
+                            f"  [#00CC66]✓[/] {name} is healthy",
+                        )
+                except Exception:
+                    all_healthy = False
+
+            self.call_from_thread(self._update_health_panel)
+
+            if len(self._healthy_services) == len(self.HEALTH_ENDPOINTS):
+                self.call_from_thread(self._all_healthy)
+                return
+
+            time.sleep(2)
+
+        # Timeout — show partial results
+        missing = [
+            name for name, _, _ in self.HEALTH_ENDPOINTS
+            if name not in self._healthy_services
+        ]
+        self.call_from_thread(
+            self._log,
+            f"[bold yellow]⚠ Timed out waiting for: {', '.join(missing)}[/]",
+        )
+        self.call_from_thread(self._enable_dashboard)
+
+    def _update_health_panel(self) -> None:
+        lines = []
+        for name, _, _ in self.HEALTH_ENDPOINTS:
+            if name in self._healthy_services:
+                lines.append(f"  [#00CC66]✓[/] {name}")
+            else:
+                lines.append(f"  [#8A8A8A]…[/] {name}")
+        self.query_one("#docker-health", Static).update("\n".join(lines))
+
+    def _all_healthy(self) -> None:
+        self._log(
+            f"\n[bold green]All services are healthy![/]\n"
+            f"[bold]Dashboard:[/]     {self.state.dashboard_url}\n"
+            f"[bold]Engine API:[/]    http://localhost:8000\n"
+            f"[bold]OTel Collector:[/] http://localhost:4317 (gRPC) / :4318 (HTTP)"
+        )
+        self._enable_dashboard()
+
+    def _enable_dashboard(self) -> None:
+        self.query_one("#btn-dashboard", Button).disabled = False
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-done":
+        if event.button.id == "btn-dashboard":
+            import webbrowser
+            webbrowser.open(self.state.dashboard_url)
+        elif event.button.id == "btn-done":
             self.app.exit()
 
+
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
 
 class TraceCtrlSetup(App):
     """TraceCtrl first-time setup TUI."""
@@ -302,24 +825,40 @@ class TraceCtrlSetup(App):
         background: #040404;
         color: #F5F5F5;
     }
+
+    /* ---------- Welcome ---------- */
     #welcome-art {
         color: #FC0404;
         text-align: center;
     }
-    #reg-title, #config-title, #confirm-title, #launch-title {
+
+    /* ---------- Titles & subtitles ---------- */
+    #reg-title, #config-title, #confirm-title, #launch-title,
+    #framework-title, #ocpath-title, #ocaction-title, #scan-title,
+    #strands-title, #project-title, #docker-title {
         color: #F5F5F5;
         text-style: bold;
     }
-    #reg-subtitle {
+    #reg-subtitle, #framework-subtitle, #ocpath-subtitle,
+    #ocaction-subtitle, #strands-subtitle, #strands-info,
+    #project-preview, #scan-note {
         color: #8A8A8A;
         margin: 0 2 1 2;
     }
+    #ocaction-path {
+        color: #00CC66;
+        margin: 0 2 0 2;
+    }
+
+    /* ---------- Env preview ---------- */
     #env-preview {
         color: #AAAAAA;
         margin: 1 2;
         padding: 1;
         border: solid #222222;
     }
+
+    /* ---------- Inputs & selects ---------- */
     Input {
         margin: 0 2 1 2;
     }
@@ -330,16 +869,108 @@ class TraceCtrlSetup(App):
     Select {
         margin: 0 2 1 2;
     }
+
+    /* ---------- Buttons ---------- */
     Button {
         margin: 1 2;
     }
-    #btn-start, #btn-review, #btn-launch, #btn-register {
+    #btn-start, #btn-review, #btn-launch, #btn-register,
+    #btn-openclaw, #btn-strands, #btn-scan, #btn-explore,
+    #btn-next, #btn-continue, #btn-dashboard {
         background: #FC0404;
     }
-    #btn-skip {
+    #btn-skip, #btn-back, #btn-done {
         background: #2A2A2A;
         color: #8A8A8A;
     }
+    #btn-fix {
+        background: #FF6B35;
+    }
+
+    /* ---------- Framework buttons ---------- */
+    #framework-buttons {
+        height: auto;
+        margin: 1 2;
+    }
+    #framework-buttons Button {
+        width: 100%;
+        height: 3;
+        margin: 0 0 1 0;
+    }
+
+    /* ---------- Action buttons ---------- */
+    #ocaction-buttons {
+        height: auto;
+        margin: 1 2;
+    }
+    #ocaction-buttons Button {
+        width: 100%;
+        height: 3;
+        margin: 0 0 1 0;
+    }
+
+    /* ---------- Path validation ---------- */
+    #ocpath-status {
+        margin: 0 2;
+        height: 1;
+    }
+
+    /* ---------- Scan screen ---------- */
+    #scan-summary {
+        margin: 0 2 1 2;
+        text-style: bold;
+    }
+    #scan-loading {
+        margin: 1 2;
+        height: 3;
+    }
+    #scan-tabs {
+        height: auto;
+        margin: 0 2 1 2;
+    }
+    #scan-tabs Button {
+        min-width: 14;
+        margin: 0 1 0 0;
+    }
+
+    DataTable {
+        margin: 0 2 1 2;
+        height: 1fr;
+        border: solid #222222;
+    }
+    DataTable > .datatable--header {
+        background: #1A1A1A;
+        color: #F5F5F5;
+        text-style: bold;
+    }
+    DataTable > .datatable--cursor {
+        background: #2A2A2A;
+    }
+    DataTable > .datatable--even-row {
+        background: #0A0A0A;
+    }
+
+    #scan-fix-log {
+        margin: 0 2 1 2;
+        border: solid #222222;
+        height: auto;
+        max-height: 8;
+    }
+    #scan-actions {
+        height: auto;
+    }
+
+    /* ---------- Docker screen ---------- */
+    #docker-log {
+        margin: 1 2;
+        border: solid #222222;
+        height: 1fr;
+    }
+    #docker-health {
+        margin: 0 2 1 2;
+    }
+
+    /* ---------- Shared ---------- */
     RichLog {
         margin: 1 2;
         border: solid #222222;
@@ -348,15 +979,19 @@ class TraceCtrlSetup(App):
     Horizontal {
         height: auto;
     }
+    LoadingIndicator {
+        color: #FC0404;
+    }
     """
 
     BINDINGS = [Binding("q", "quit", "Quit")]
 
     def on_mount(self) -> None:
+        self.state = WizardState()
         self.push_screen(WelcomeScreen())
 
 
-# Alias for CLI entry point
+# Alias for CLI entry point / SDK shim compatibility
 TraceCtrlApp = TraceCtrlSetup
 
 if __name__ == "__main__":
