@@ -24,33 +24,35 @@ def cmd_setup(args: argparse.Namespace) -> None:
     try:
         from textual.app import App  # noqa: F401
     except ImportError:
-        print(
-            "The setup wizard requires additional dependencies.\n"
-            "Install them with:\n\n"
-            "  pip install tracectrl[setup]\n"
-        )
+        print("Textual not installed. Run: pip install textual rich")
         sys.exit(1)
 
-    # Import and run the TUI — it lives in the setup/ directory at repo root,
-    # but when installed via pip, we bundle it as tracectrl._tui
+    # Try bundled _tui first (pip-installed), then search for setup/tui.py
     try:
         from tracectrl._tui import TraceCtrlApp
         app = TraceCtrlApp()
         app.run()
+        return
     except ImportError:
-        # Fallback: try running the standalone setup/tui.py if we're in the repo
-        import subprocess
+        pass
 
-        tui_path = Path(__file__).resolve().parents[4] / "setup" / "tui.py"
+    # Search for setup/tui.py relative to cli.py or cwd
+    import subprocess
+    candidates = [
+        Path(__file__).resolve().parents[4] / "setup" / "tui.py",
+        Path(__file__).resolve().parents[3] / "setup" / "tui.py",
+        Path.cwd() / "setup" / "tui.py",
+    ]
+    for tui_path in candidates:
         if tui_path.exists():
             subprocess.run([sys.executable, str(tui_path)], check=True)
-        else:
-            print(
-                "Could not find the setup wizard.\n"
-                "If running from source, use: python setup/tui.py\n"
-                "If installed via pip, ensure tracectrl[setup] is installed."
-            )
-            sys.exit(1)
+            return
+
+    print(
+        "Could not find the setup wizard.\n"
+        "Run from the tracectrl repo root, or use: python setup/tui.py"
+    )
+    sys.exit(1)
 
 
 def cmd_version(args: argparse.Namespace) -> None:
