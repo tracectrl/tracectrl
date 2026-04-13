@@ -683,10 +683,10 @@ class DockerScreen(Screen):
     """Launch Docker Compose and poll service health."""
 
     HEALTH_ENDPOINTS = [
-        ("ClickHouse", "http://localhost:8123", "/"),
-        ("Engine", "http://localhost:8000", "/health"),
+        ("ClickHouse", "http://localhost:8123", "/ping"),
+        ("Engine", "http://localhost:8000", "/api/v1/health"),
         ("UI", "http://localhost:3000", "/"),
-        ("Collector", "http://localhost:4318", "/"),
+        ("Collector", "http://localhost:4318", "/v1/traces"),
     ]
 
     def __init__(self, state: WizardState):
@@ -776,6 +776,16 @@ class DockerScreen(Screen):
                             self._log,
                             f"  [#00CC66]✓[/] {name} is healthy",
                         )
+                except urllib.error.HTTPError as e:
+                    # 405 = endpoint exists but doesn't accept GET (e.g. OTel collector)
+                    if e.code == 405:
+                        self._healthy_services.add(name)
+                        self.app.call_from_thread(
+                            self._log,
+                            f"  [#00CC66]✓[/] {name} is healthy",
+                        )
+                    else:
+                        all_healthy = False
                 except Exception:
                     all_healthy = False
 
