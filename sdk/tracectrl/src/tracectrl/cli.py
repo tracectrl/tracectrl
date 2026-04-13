@@ -64,9 +64,10 @@ def cmd_version(args: argparse.Namespace) -> None:
 
 
 def cmd_doctor(args: argparse.Namespace) -> None:
-    """Check if TraceCtrl services are reachable."""
+    """Check if TraceCtrl services are reachable and plugin is installed."""
     import urllib.request
     import urllib.error
+    import shutil
 
     checks = [
         ("Engine API", "http://localhost:8000/api/v1/health"),
@@ -75,30 +76,177 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     ]
 
     print("TraceCtrl Doctor\n")
+    print("  Services:")
     all_ok = True
     for name, url in checks:
         try:
             req = urllib.request.Request(url, method="GET")
             with urllib.request.urlopen(req, timeout=3):
                 pass
-            print(f"  [OK]   {name} ({url})")
+            print(f"    [OK]   {name} ({url})")
         except urllib.error.HTTPError as e:
-            # 405 = endpoint exists but doesn't accept GET (e.g. OTel collector)
             if e.code == 405:
-                print(f"  [OK]   {name} ({url})")
+                print(f"    [OK]   {name} ({url})")
             else:
-                print(f"  [WARN] {name} — HTTP {e.code} ({url})")
+                print(f"    [WARN] {name} — HTTP {e.code} ({url})")
                 all_ok = False
         except Exception as e:
-            print(f"  [FAIL] {name} — {e} ({url})")
+            print(f"    [FAIL] {name} — {e} ({url})")
             all_ok = False
+
+    # Check Docker
+    print("\n  Docker:")
+    if shutil.which("docker"):
+        print("    [OK]   Docker is installed")
+    else:
+        print("    [FAIL] Docker not found")
+        all_ok = False
+
+    # Check OpenClaw plugin
+    print("\n  OpenClaw Plugin:")
+    openclaw_root = Path("~/.openclaw").expanduser()
+    plugin_dir = openclaw_root / "extensions" / "tracectrl"
+    plugin_dist = plugin_dir / "dist" / "index.js"
+
+    if not openclaw_root.exists():
+        print("    [SKIP] OpenClaw not installed (~/.openclaw/ not found)")
+    elif plugin_dist.exists():
+        print(f"    [OK]   TraceCtrl plugin installed ({plugin_dir})")
+        # Check if enabled in config
+        config_file = openclaw_root / "openclaw.json"
+        if config_file.exists():
+            try:
+                import pyjson5
+                cfg = pyjson5.decode(config_file.read_text())
+            except Exception:
+                cfg = json.loads(config_file.read_text())
+            plugins_allow = cfg.get("plugins", {}).get("allow", [])
+            plugin_entries = cfg.get("plugins", {}).get("entries", {})
+            if "tracectrl" in plugins_allow or "tracectrl" in plugin_entries:
+                print("    [OK]   Plugin enabled in openclaw.json")
+            else:
+                print("    [WARN] Plugin installed but not enabled in openclaw.json")
+                print("           Run: tracectrl install-plugin --configure")
+        else:
+            print("    [WARN] openclaw.json not found")
+    else:
+        print("    [MISS] TraceCtrl plugin not installed")
+        print("           Run: tracectrl install-plugin")
 
     print()
     if all_ok:
-        print("All services are running.")
+        print("All checks passed.")
     else:
-        print("Some services are not reachable. Run 'docker compose up -d' to start them.")
+        print("Some checks failed. See above for details.")
     sys.exit(0 if all_ok else 1)
+
+
+def cmd_install_plugin(args: argparse.Namespace) -> None:
+    """Install the TraceCtrl OpenClaw plugin for rich telemetry."""
+    import shutil
+    import subprocess
+
+    from rich.console import Console
+    console = Console()
+
+    openclaw_path = Path(args.path).expanduser().resolve() if args.path else Path("~/.openclaw").expanduser()
+    configure = args.configure
+    endpoint = args.endpoint
+
+    if not openclaw_path.exists():
+        console.print(f"[red]OpenClaw installation not found at {openclaw_path}[/red]")
+        sys.exit(1)
+
+    # Find the plugin source
+    # Try: repo root plugins/, then installed package location
+    plugin_src = None
+    candidates = [
+        Path(__file__).resolve().parents[4] / "plugins" / "openclaw-tracectrl",
+        Path(__file__).resolve().parents[3] / "plugins" / "openclaw-tracectrl",
+    ]
+    for candidate in candidates:
+        if (candidate / "package.json").exists():
+            plugin_src = candidate
+            break
+
+    if not plugin_src:
+        console.print("[red]Could not find TraceCtrl plugin source.[/red]")
+        console.print("Ensure you're running from the tracectrl repository.")
+        sys.exit(1)
+
+    target = openclaw_path / "extensions" / "tracectrl"
+
+    # Copy plugin
+    console.print(f"\n  Copying plugin to {target}")
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(plugin_src, target, ignore=shutil.ignore_patterns("node_modules", "dist", ".git"))
+
+    # Install deps
+    console.print("  Installing dependencies...")
+    result = subprocess.run(
+        ["npm", "install", "--production"],
+        cwd=str(target),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        console.print(f"[red]npm install failed:[/red]\n{result.stderr}")
+        sys.exit(1)
+    console.print("  [green]Dependencies installed[/green]")
+
+    # Build TypeScript
+    console.print("  Building TypeScript...")
+    result = subprocess.run(
+        ["npm", "run", "build"],
+        cwd=str(target),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        console.print(f"[red]Build failed:[/red]\n{result.stderr}")
+        sys.exit(1)
+    console.print("  [green]Build complete[/green]")
+
+    # Configure openclaw.json
+    if configure:
+        config_file = openclaw_path / "openclaw.json"
+        if config_file.exists():
+            try:
+                import pyjson5
+                config = pyjson5.decode(config_file.read_text())
+            except ImportError:
+                config = json.loads(config_file.read_text())
+
+            # Add to plugins.allow
+            plugins = config.setdefault("plugins", {})
+            allow = plugins.setdefault("allow", [])
+            if "tracectrl" not in allow:
+                allow.append("tracectrl")
+
+            # Add plugin config
+            entries = plugins.setdefault("entries", {})
+            entries["tracectrl"] = {
+                "enabled": True,
+                "config": {
+                    "endpoint": endpoint,
+                    "serviceName": "openclaw-gateway",
+                    "captureContent": True,
+                },
+            }
+
+            # Write back
+            config_file.write_text(json.dumps(config, indent=2))
+            console.print(f"  [green]Updated {config_file}[/green]")
+        else:
+            console.print(f"  [yellow]No openclaw.json found at {config_file}[/yellow]")
+
+    console.print(f"\n  [bold green]TraceCtrl plugin installed successfully![/bold green]")
+    if not configure:
+        console.print("  Run with --configure to auto-update openclaw.json")
+    console.print("  Restart OpenClaw to activate the plugin.\n")
 
 
 def _discover_engine_url(openclaw_config: dict | None = None) -> str | None:
@@ -626,6 +774,28 @@ def main() -> None:
         help="Port for the monitoring dashboard",
     )
 
+    # --- install-plugin --------------------------------------------------------
+    plugin_parser = subparsers.add_parser(
+        "install-plugin", help="Install the TraceCtrl OpenClaw plugin"
+    )
+    plugin_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Path to OpenClaw installation (default: ~/.openclaw/)",
+    )
+    plugin_parser.add_argument(
+        "--configure",
+        action="store_true",
+        default=False,
+        help="Auto-update openclaw.json to enable the plugin",
+    )
+    plugin_parser.add_argument(
+        "--endpoint",
+        default="http://localhost:4318",
+        help="OTEL collector endpoint for the plugin (default: http://localhost:4318)",
+    )
+
     args = parser.parse_args()
 
     commands = {
@@ -635,6 +805,7 @@ def main() -> None:
         "scan": cmd_scan,
         "fix": cmd_fix,
         "monitor": cmd_monitor,
+        "install-plugin": cmd_install_plugin,
     }
 
     handler = commands.get(args.command)
