@@ -355,11 +355,15 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
 def cmd_fix(args: argparse.Namespace) -> None:
     """Apply automated remediations from the last scan."""
+    import dataclasses
+
     try:
-        from tracectrl_scanner.discovery import discover
+        from tracectrl_scanner.discovery import discover, list_agents
         from tracectrl_scanner.parser import parse_config
         from tracectrl_scanner.benchmark.runner import run_all
         from tracectrl_scanner.fix import get_automatable_fixes, apply_fixes, print_fix_report
+        from tracectrl_scanner.topology.builder import build
+        from tracectrl_scanner.topology.risk import score_compound_risks
     except ImportError:
         print("Scanner not installed. Run: pip install tracectrl-scanner")
         sys.exit(1)
@@ -370,6 +374,8 @@ def cmd_fix(args: argparse.Namespace) -> None:
     path = getattr(args, 'path', None)
     auto = getattr(args, 'auto', False)
     dry_run = getattr(args, 'dry_run', False)
+    no_upload = getattr(args, 'no_upload', False)
+    engine_url_arg = getattr(args, 'engine_url', None)
 
     try:
         root = discover(path)
@@ -411,6 +417,36 @@ def cmd_fix(args: argparse.Namespace) -> None:
     console.print(f"\n  Before: {len(old_failed)} findings → After: {len(new_failed)} findings")
     if not new_failed:
         console.print("  [bold green]All automated fixes verified — clean scan![/bold green]")
+
+    # --- Upload re-scan results to engine (best-effort) ------------------------
+    if not no_upload:
+        agent_ids = list_agents(root)
+        graph = build(new_config, root, agent_ids)
+        score_compound_risks(new_results, graph)
+
+        checks_dicts = [dataclasses.asdict(r) for r in new_results]
+        topology_dict = {
+            "nodes": [
+                {"id": n.id, "type": n.type.value if hasattr(n.type, 'value') else n.type,
+                 "label": n.label, "properties": n.properties}
+                for n in graph.nodes
+            ],
+            "edges": [
+                {"id": e.id, "source": e.source, "target": e.target,
+                 "type": e.type.value if hasattr(e.type, 'value') else e.type,
+                 "properties": e.properties}
+                for e in graph.edges
+            ],
+        }
+
+        engine_url = engine_url_arg or _discover_engine_url(new_config)
+        if engine_url:
+            _upload_scan_results(engine_url, str(root), "L1", checks_dicts, topology=topology_dict)
+            console.print("  Results uploaded to engine.")
+        else:
+            console.print("  [yellow]No reachable TraceCtrl engine found — skipping upload.[/yellow]")
+            console.print("         Run with --engine-url to specify manually.")
+
     sys.exit(0)
 
 
@@ -560,6 +596,17 @@ def main() -> None:
         nargs="?",
         default=None,
         help="Path to OpenClaw installation (default: auto-discover)",
+    )
+    fix_parser.add_argument(
+        "--engine-url",
+        default=None,
+        help="TraceCtrl engine URL for uploading results (auto-discovers if omitted)",
+    )
+    fix_parser.add_argument(
+        "--no-upload",
+        action="store_true",
+        default=False,
+        help="Skip uploading re-scan results to the engine",
     )
 
     # --- monitor ---------------------------------------------------------------
