@@ -209,7 +209,7 @@ def cmd_install_plugin(args: argparse.Namespace) -> None:
         timeout=60,
     )
     if result.returncode != 0:
-        console.print(f"[red]Build failed:[/red]\n{result.stderr}")
+        console.print(f"[red]Build failed:[/red]\n{result.stdout}\n{result.stderr}")
         sys.exit(1)
     console.print("  [green]Build complete[/green]")
 

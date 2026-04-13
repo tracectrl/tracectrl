@@ -1,13 +1,14 @@
-import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { initTelemetry } from "./telemetry.js";
 import { registerHooks } from "./hooks.js";
 import { parseConfig } from "./config.js";
 
-export default definePluginEntry({
+// OpenClaw plugin entry — exported as a plain object.
+// OpenClaw's plugin loader accepts both definePluginEntry() and plain objects.
+export default {
   id: "tracectrl",
   name: "TraceCtrl",
   description: "Security observability for AI agents",
-  register(api) {
+  register(api: any) {
     const config = parseConfig(api.config);
     const logger = api.logger;
 
@@ -20,4 +21,4 @@ export default definePluginEntry({
 
     logger.info("[tracectrl] Plugin registered successfully");
   },
-});
+};
