@@ -75,10 +75,12 @@ function startCleanupLoop(logger: Logger): void {
 // Helpers
 // ---------------------------------------------------------------------------
 
+let unknownCounter = 0;
 function sessionKey(event: Record<string, any>): string {
-  return (
-    String(event.sessionKey ?? event.session_key ?? event.sessionId ?? "unknown")
-  );
+  const key = event.sessionKey ?? event.session_key ?? event.sessionId;
+  if (key != null) return String(key);
+  // Generate unique fallback to avoid session map collisions
+  return `unknown-${Date.now()}-${++unknownCounter}`;
 }
 
 function truncate(s: string, max: number): string {
@@ -192,6 +194,7 @@ export function registerHooks(
   // 3. tool_result_persist  (priority -100, SYNCHRONOUS)
   // -----------------------------------------------------------------------
   api.on("tool_result_persist", -100, (event: Record<string, any>) => {
+    let toolSpan: any = undefined;
     try {
       const key = sessionKey(event);
       const session = sessionContextMap.get(key);
@@ -200,7 +203,7 @@ export function registerHooks(
       const toolName = String(event.toolName ?? event.tool_name ?? "unknown");
       const toolCallId = String(event.callId ?? event.call_id ?? "");
 
-      const toolSpan = tracer.startSpan(
+      toolSpan = tracer.startSpan(
         `tracectrl.tool.${toolName}`,
         {
           kind: SpanKind.INTERNAL,
@@ -253,13 +256,13 @@ export function registerHooks(
 
       // Increment tool call counter
       counters.toolCalls.add(1, { "tracectrl.tool.name": toolName });
-
-      // Synchronous — end span immediately
-      toolSpan.end();
     } catch (err) {
+      toolSpan?.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
       logger.error(
         `[tracectrl] tool_result_persist hook error: ${err instanceof Error ? err.message : String(err)}`
       );
+    } finally {
+      toolSpan?.end();
     }
     return undefined;
   });
@@ -315,8 +318,18 @@ export function registerHooks(
           "tracectrl.tokens.cache_read": cacheReadTokens,
           "tracectrl.tokens.cache_write": cacheWriteTokens,
           "gen_ai.response.model": String(event.model ?? event.result?.model ?? "unknown"),
-          "tracectrl.agent.success": !event.error,
+          "tracectrl.agent.success": event.error == null || event.error === false,
         });
+
+        // Set span error status if agent turn failed
+        if (event.error != null && event.error !== false) {
+          session.agentSpan.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: String(event.error).slice(0, 200),
+          });
+        } else {
+          session.agentSpan.setStatus({ code: SpanStatusCode.OK });
+        }
 
         const durationMs = Date.now() - session.startTime;
         session.agentSpan.setAttribute("tracectrl.agent.duration_ms", durationMs);

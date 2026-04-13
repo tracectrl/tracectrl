@@ -17,6 +17,28 @@
       "captureContent": {
         "type": "boolean",
         "description": "Capture message and tool content (privacy-sensitive)"
+      },
+      "protocol": {
+        "type": "string",
+        "enum": ["http", "grpc"],
+        "description": "OTLP export protocol"
+      },
+      "traces": {
+        "type": "boolean",
+        "description": "Enable trace export"
+      },
+      "metrics": {
+        "type": "boolean",
+        "description": "Enable metrics export"
+      },
+      "metricsIntervalMs": {
+        "type": "number",
+        "description": "Metrics export interval in milliseconds"
+      },
+      "headers": {
+        "type": "object",
+        "description": "Custom headers for OTLP exporter",
+        "additionalProperties": { "type": "string" }
       }
     },
     "additionalProperties": false

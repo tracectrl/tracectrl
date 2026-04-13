@@ -165,6 +165,7 @@ def cmd_install_plugin(args: argparse.Namespace) -> None:
     candidates = [
         Path(__file__).resolve().parents[4] / "plugins" / "openclaw-tracectrl",
         Path(__file__).resolve().parents[3] / "plugins" / "openclaw-tracectrl",
+        Path.cwd() / "plugins" / "openclaw-tracectrl",
     ]
     for candidate in candidates:
         if (candidate / "package.json").exists():
@@ -591,7 +592,8 @@ def cmd_fix(args: argparse.Namespace) -> None:
 
         engine_url = engine_url_arg or _discover_engine_url(new_config)
         if engine_url:
-            _upload_scan_results(engine_url, str(root), "L1", checks_dicts, topology=topology_dict)
+            profile = getattr(args, 'profile', 'L1')
+            _upload_scan_results(engine_url, str(root), profile, checks_dicts, topology=topology_dict)
             console.print("  Results uploaded to engine.")
         else:
             console.print("  [yellow]No reachable TraceCtrl engine found — skipping upload.[/yellow]")

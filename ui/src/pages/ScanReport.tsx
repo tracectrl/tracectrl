@@ -23,6 +23,17 @@ const CATEGORY_MAP: Record<string, string> = {
 
 const CATEGORY_ORDER = ['Security', 'Operational', 'Performance', 'Compliance']
 
+const SECTION_PREFIX_MAP: Record<string, string[]> = {
+  'Ingress': ['ingress:'],
+  'Tools': ['tool:'],
+  'LLM Providers': ['llm:'],
+  'Lateral Movement': ['subagent_surface:'],
+  'Persistence': ['scheduler:'],
+  'Plugins': ['extension:'],
+}
+const AGENT_SECTIONS = new Set(['Network', 'Guardrails', 'Credentials', 'Filesystem', 'Logging'])
+const SEV_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1 }
+
 function severityBadgeClass(severity: string): string {
   const s = severity.toLowerCase()
   if (s === 'critical') return 'badge-critical'
@@ -127,17 +138,6 @@ export default function ScanReport() {
       .map(g => g.name)
     setExpandedCategories(new Set(withFailures))
   }, [categoryGroups])
-
-  const SECTION_PREFIX_MAP: Record<string, string[]> = {
-    'Ingress': ['ingress:'],
-    'Tools': ['tool:'],
-    'LLM Providers': ['llm:'],
-    'Lateral Movement': ['subagent_surface:'],
-    'Persistence': ['scheduler:'],
-    'Plugins': ['extension:'],
-  }
-  const AGENT_SECTIONS = new Set(['Network', 'Guardrails', 'Credentials', 'Filesystem', 'Logging'])
-  const SEV_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1 }
 
   const nodeRiskMap = useMemo(() => {
     const map = new Map<string, string>()

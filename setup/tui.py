@@ -24,6 +24,8 @@ try:
     from textual import work
     from textual.worker import Worker
     from rich.text import Text
+    # Textual 8.0 renamed Select.BLANK to Select.NULL
+    SELECT_BLANK = getattr(Select, 'BLANK', None) or getattr(Select, 'NULL', None)
 except ImportError:
     print("Textual not installed. Run: pip install textual rich")
     sys.exit(1)
@@ -186,9 +188,9 @@ class RegistrationScreen(Screen):
         role_sel = self.query_one("#reg_role", Select)
         org_size_sel = self.query_one("#reg_org_size", Select)
 
-        user_type = str(user_type_sel.value) if user_type_sel.value != Select.BLANK else ""
-        role = str(role_sel.value) if role_sel.value != Select.BLANK else ""
-        org_size = str(org_size_sel.value) if org_size_sel.value != Select.BLANK else None
+        user_type = str(user_type_sel.value) if user_type_sel.value != SELECT_BLANK else ""
+        role = str(role_sel.value) if role_sel.value != SELECT_BLANK else ""
+        org_size = str(org_size_sel.value) if org_size_sel.value != SELECT_BLANK else None
 
         if not email or "@" not in email:
             self.notify("Please enter a valid email address", severity="error")
@@ -432,16 +434,23 @@ class ScanScreen(Screen):
 
     @work(thread=True, exclusive=True)
     def _run_scan(self) -> None:
-        from tracectrl_scanner.discovery import discover
-        from tracectrl_scanner.parser import parse_config
-        from tracectrl_scanner.benchmark.runner import run_all
+        try:
+            from tracectrl_scanner.discovery import discover
+            from tracectrl_scanner.parser import parse_config
+            from tracectrl_scanner.benchmark.runner import run_all
 
-        root = discover(self.state.openclaw_path)
-        config = parse_config(root)
-        results = run_all(config, root)
-        self.state.scan_results = results
-        self.state.scan_root = root
-        self.call_from_thread(self._show_results, results)
+            root = discover(self.state.openclaw_path)
+            config = parse_config(root)
+            results = run_all(config, root)
+            self.state.scan_results = results
+            self.state.scan_root = root
+            self.call_from_thread(self._show_results, results)
+        except Exception as e:
+            self.call_from_thread(self._show_scan_error, str(e))
+
+    def _show_scan_error(self, message: str) -> None:
+        self.query_one("#scan-loading").display = False
+        self.notify(f"Scan failed: {message}", severity="error")
 
     def _show_results(self, results: list) -> None:
         # Hide loading
@@ -524,33 +533,34 @@ class ScanScreen(Screen):
 
     @work(thread=True, exclusive=True)
     def _run_fix_rescan(self) -> None:
-        from tracectrl_scanner.parser import parse_config
-        from tracectrl_scanner.benchmark.runner import run_all
-        from tracectrl_scanner.fix import get_automatable_fixes, apply_fixes
+        try:
+            from tracectrl_scanner.parser import parse_config
+            from tracectrl_scanner.benchmark.runner import run_all
+            from tracectrl_scanner.fix import get_automatable_fixes, apply_fixes
 
-        config_path = self.state.scan_root / "openclaw.json"
-        config = parse_config(self.state.scan_root)
-        automatable, manual = get_automatable_fixes(self.state.scan_results)
-        applied = apply_fixes(config, config_path, automatable)
+            config_path = self.state.scan_root / "openclaw.json"
+            config = parse_config(self.state.scan_root)
+            automatable, manual = get_automatable_fixes(self.state.scan_results)
+            applied = apply_fixes(config, config_path, automatable)
 
-        # Log each fix
-        for fix in applied:
-            self.call_from_thread(
-                self._log_fix,
-                f"[#00CC66]✓[/] {fix['check_id']}: {fix['description']}",
-            )
+            for fix in applied:
+                self.call_from_thread(
+                    self._log_fix,
+                    f"[#00CC66]✓[/] {fix['check_id']}: {fix['description']}",
+                )
 
-        if manual:
-            self.call_from_thread(
-                self._log_fix,
-                f"[#FFBB00]![/] {len(manual)} finding(s) require manual remediation",
-            )
+            if manual:
+                self.call_from_thread(
+                    self._log_fix,
+                    f"[#FFBB00]![/] {len(manual)} finding(s) require manual remediation",
+                )
 
-        # Re-scan
-        new_config = parse_config(self.state.scan_root)
-        new_results = run_all(new_config, self.state.scan_root)
-        self.state.scan_results = new_results
-        self.call_from_thread(self._show_results, new_results)
+            new_config = parse_config(self.state.scan_root)
+            new_results = run_all(new_config, self.state.scan_root)
+            self.state.scan_results = new_results
+            self.call_from_thread(self._show_results, new_results)
+        except Exception as e:
+            self.call_from_thread(self._show_scan_error, str(e))
 
     def _log_fix(self, message: str) -> None:
         log = self.query_one("#scan-fix-log", RichLog)
@@ -641,7 +651,11 @@ class ProjectScreen(Screen):
                 self.notify("Please enter a project name", severity="error")
                 return
             self.state.project_name = name
-            self._write_env()
+            try:
+                self._write_env()
+            except OSError as e:
+                self.notify(f"Could not write .env: {e}", severity="error")
+                return
             self.app.push_screen(DockerScreen(self.state))
 
     def _write_env(self) -> None:
