@@ -5,9 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "lint": "tsc --noEmit"
+    "build": "npx tsc",
+    "dev": "npx tsc --watch",
+    "lint": "npx tsc --noEmit"
   },
   "openclaw": {
     "extensions": {

@@ -188,7 +188,7 @@ def cmd_install_plugin(args: argparse.Namespace) -> None:
     # Install deps
     console.print("  Installing dependencies...")
     result = subprocess.run(
-        ["npm", "install", "--production"],
+        ["npm", "install"],
         cwd=str(target),
         capture_output=True,
         text=True,
