@@ -6,21 +6,24 @@ from ..models import CheckResult, Severity, Profile, AssessmentType
 def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
     results: list[CheckResult] = []
 
-    # OC-NET-001: gateway.bind must not be "0.0.0.0"
+    # OC-NET-001: gateway.bind should be "loopback" (not lan/tailnet/auto/custom or raw IPs)
     gateway = config.get("gateway", {})
-    bind_addr = gateway.get("bind", "127.0.0.1")
+    bind_addr = gateway.get("bind", "loopback")
+    # Safe values: "loopback" or "127.0.0.1" (legacy)
+    safe_binds = {"loopback", "127.0.0.1", "localhost"}
+    is_safe = bind_addr in safe_binds
     results.append(CheckResult(
         check_id="OC-NET-001",
         section="Network",
-        title="Gateway bind address is not 0.0.0.0",
+        title="Gateway bind address is not network-exposed",
         severity=Severity.CRITICAL,
         profile=Profile.L1,
         assessment_type=AssessmentType.AUTOMATED,
-        passed=bind_addr != "0.0.0.0",
-        finding=f"gateway.bind is set to \"{bind_addr}\"" if bind_addr == "0.0.0.0" else None,
-        remediation="Set gateway.bind to \"127.0.0.1\" or a specific internal IP address.",
+        passed=is_safe,
+        finding=f"gateway.bind is \"{bind_addr}\" — gateway is exposed beyond localhost" if not is_safe else None,
+        remediation="Set gateway.bind to \"loopback\" to restrict access to localhost only.",
         config_path="gateway.bind",
-        rationale="Binding to 0.0.0.0 exposes the gateway to all network interfaces, allowing any device on the network to send messages to your AI agent.",
+        rationale="Non-loopback bind modes (lan, tailnet, auto, custom, 0.0.0.0) expose the gateway to other devices on the network, allowing unauthorized access to your AI agent.",
     ))
 
     # OC-NET-002: webhook.tls.enabled should be true (only if webhook is configured)

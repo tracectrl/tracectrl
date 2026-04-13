@@ -21,56 +21,78 @@ def _register(check_id: str):
 
 @_register("OC-NET-001")
 def fix_net_001(config: dict[str, Any]) -> str:
-    """Set gateway.bind to 127.0.0.1"""
-    config.setdefault("gateway", {})["bind"] = "127.0.0.1"
-    return 'Set gateway.bind = "127.0.0.1"'
+    """Set gateway.bind to loopback"""
+    gateway = config.get("gateway")
+    if isinstance(gateway, dict):
+        gateway["bind"] = "loopback"
+    else:
+        config["gateway"] = {"bind": "loopback"}
+    return 'Set gateway.bind = "loopback"'
 
 @_register("OC-TOOL-001")
 def fix_tool_001(config: dict[str, Any]) -> str:
-    """Remove bash and shell from tools.allow"""
+    """Remove bash and exec from tools.allow/deny lists"""
     removed = []
-    # Use setdefault to ensure mutations propagate back to config
-    tools = (config.setdefault("agents", {})
-             .setdefault("defaults", {})
-             .setdefault("tools", {})
-             .setdefault("allow", []))
-    for dangerous in ("bash", "shell", "exec"):
-        while dangerous in tools:
-            tools.remove(dangerous)
-            removed.append(dangerous)
-    # Also check top-level
-    top_tools = config.setdefault("tools", {}).setdefault("allow", [])
-    for dangerous in ("bash", "shell", "exec"):
-        while dangerous in top_tools:
-            top_tools.remove(dangerous)
-            removed.append(dangerous)
-    # Also check per-agent tool lists
+    dangerous = ("bash", "exec")
+
+    # Only modify sections that already exist — never create empty ones
+    # Check agents.defaults.tools.allow
+    agent_tools = (config.get("agents", {}).get("defaults", {})
+                   .get("tools", {}).get("allow"))
+    if isinstance(agent_tools, list):
+        for d in dangerous:
+            while d in agent_tools:
+                agent_tools.remove(d)
+                removed.append(d)
+
+    # Check top-level tools.allow
+    top_tools = config.get("tools", {}).get("allow")
+    if isinstance(top_tools, list):
+        for d in dangerous:
+            while d in top_tools:
+                top_tools.remove(d)
+                removed.append(d)
+
+    # Check per-agent tool lists
     for agent in config.get("agents", {}).get("list", []):
-        agent_tools = agent.setdefault("tools", {}).setdefault("allow", [])
-        for dangerous in ("bash", "shell", "exec"):
-            while dangerous in agent_tools:
-                agent_tools.remove(dangerous)
-                removed.append(f"{dangerous} (agent: {agent.get('id', 'unknown')})")
-    return f'Removed {", ".join(removed)} from tools.allow'
+        if isinstance(agent, dict):
+            per_agent = agent.get("tools", {}).get("allow")
+            if isinstance(per_agent, list):
+                for d in dangerous:
+                    while d in per_agent:
+                        per_agent.remove(d)
+                        removed.append(f"{d} (agent: {agent.get('id', '?')})")
+
+    return f'Removed {", ".join(removed)} from tools.allow' if removed else 'No dangerous tools found in allow lists'
 
 @_register("OC-TOOL-002")
 def fix_tool_002(config: dict[str, Any]) -> str:
     """Remove wildcard from tools.allow"""
-    tools = (config.setdefault("agents", {})
-             .setdefault("defaults", {})
-             .setdefault("tools", {})
-             .setdefault("allow", []))
-    while "*" in tools:
-        tools.remove("*")
-    top_tools = config.setdefault("tools", {}).setdefault("allow", [])
-    while "*" in top_tools:
-        top_tools.remove("*")
-    # Also check per-agent tool lists
-    for agent in config.get("agents", {}).get("list", []):
-        agent_tools = agent.setdefault("tools", {}).setdefault("allow", [])
+    removed = False
+
+    # Only modify existing sections
+    agent_tools = (config.get("agents", {}).get("defaults", {})
+                   .get("tools", {}).get("allow"))
+    if isinstance(agent_tools, list):
         while "*" in agent_tools:
             agent_tools.remove("*")
-    return 'Removed "*" from tools.allow — add specific tools you need'
+            removed = True
+
+    top_tools = config.get("tools", {}).get("allow")
+    if isinstance(top_tools, list):
+        while "*" in top_tools:
+            top_tools.remove("*")
+            removed = True
+
+    for agent in config.get("agents", {}).get("list", []):
+        if isinstance(agent, dict):
+            per_agent = agent.get("tools", {}).get("allow")
+            if isinstance(per_agent, list):
+                while "*" in per_agent:
+                    per_agent.remove("*")
+                    removed = True
+
+    return 'Removed "*" from tools.allow — add specific tools you need' if removed else 'No wildcard found'
 
 @_register("OC-ING-001")
 def fix_ing_001(config: dict[str, Any]) -> str:
@@ -86,20 +108,21 @@ def fix_ing_001(config: dict[str, Any]) -> str:
 @_register("OC-PERS-001")
 def fix_pers_001(config: dict[str, Any]) -> str:
     """Disable cron"""
-    config.setdefault("cron", {})["enabled"] = False
+    cron = config.get("cron")
+    if isinstance(cron, dict):
+        cron["enabled"] = False
+    else:
+        config["cron"] = {"enabled": False}
     return 'Set cron.enabled = false'
 
-@_register("OC-LOG-001")
-def fix_log_001(config: dict[str, Any]) -> str:
-    """Enable audit logging"""
-    config.setdefault("logging", {})["audit"] = True
-    return 'Set logging.audit = true'
+# OC-LOG-001 (audit logging) is NOT auto-fixable — logging.audit may not be
+# a valid schema key in OpenClaw's strict Zod validation. Kept as manual.
 
 @_register("OC-LOG-002")
 def fix_log_002(config: dict[str, Any]) -> str:
     """Set log level to info if debug"""
-    logging_cfg = config.setdefault("logging", {})
-    if logging_cfg.get("level") == "debug":
+    logging_cfg = config.get("logging")
+    if isinstance(logging_cfg, dict) and logging_cfg.get("level") == "debug":
         logging_cfg["level"] = "info"
         return 'Set logging.level = "info" (was "debug")'
     return 'Log level already not debug'
