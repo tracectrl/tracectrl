@@ -50,26 +50,26 @@ let sdkLoaded = false;
 async function loadSdk(logger: any): Promise<boolean> {
   if (sdkLoaded) return onDiagnosticEvent !== null;
   sdkLoaded = true;
-  try {
-    // @ts-ignore — openclaw SDK only available at runtime inside the gateway
-    const sdk = await import("openclaw/plugin-sdk");
-    if (typeof sdk.onDiagnosticEvent === "function") {
-      onDiagnosticEvent = sdk.onDiagnosticEvent;
-      logger.info("[tracectrl] Loaded onDiagnosticEvent from plugin-sdk");
-      return true;
+  // Try multiple import paths — the SDK location varies by OpenClaw version
+  const importPaths = [
+    "openclaw/plugin-sdk",
+    "openclaw/plugin-sdk/diagnostic-runtime",
+    "@openclaw/diagnostics-otel/api",
+    // Relative path from extensions dir (how built-in plugins import it)
+    "../../diagnostic-events-CFyhdc9N.js",
+  ];
+  for (const path of importPaths) {
+    try {
+      // @ts-ignore — dynamic runtime imports
+      const mod = await import(path);
+      if (typeof mod.onDiagnosticEvent === "function") {
+        onDiagnosticEvent = mod.onDiagnosticEvent;
+        logger.info(`[tracectrl] Loaded onDiagnosticEvent from ${path}`);
+        return true;
+      }
+    } catch {
+      // Try next path
     }
-    // Try alternate path
-    // @ts-ignore — openclaw SDK only available at runtime inside the gateway
-    const diag = await import("openclaw/plugin-sdk/diagnostic-runtime");
-    if (typeof diag.onDiagnosticEvent === "function") {
-      onDiagnosticEvent = diag.onDiagnosticEvent;
-      logger.info(
-        "[tracectrl] Loaded onDiagnosticEvent from diagnostic-runtime"
-      );
-      return true;
-    }
-  } catch {
-    // Not available — fall back to api.registerHook only
   }
   logger.warn(
     "[tracectrl] onDiagnosticEvent not available — using registerHook fallback"
