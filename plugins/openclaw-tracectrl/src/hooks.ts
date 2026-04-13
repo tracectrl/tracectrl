@@ -1,16 +1,25 @@
 /**
- * TraceCtrl OpenClaw hooks — uses onDiagnosticEvent (the same mechanism
- * as diagnostics-otel) plus api.on() typed hooks where available.
+ * TraceCtrl OpenClaw hooks — session lifecycle, gateway events, and diagnostic
+ * event telemetry for external OpenClaw plugins.
  *
- * The diagnostic event system is the ONLY reliable way to receive events
- * in external OpenClaw plugins. The api.on() typed hooks (message_received,
- * before_agent_start, tool_result_persist, agent_end) are not fully wired
- * for external plugins as of OpenClaw 2026.4.x.
+ * The diagnostic event system (onDiagnosticEvent) is the most reliable way to
+ * receive model-usage and message-processed events. However, it is an internal
+ * module that is only directly importable from within the bundled extensions
+ * directory (via a chunked relative path). External plugins installed to
+ * ~/.openclaw/extensions/ cannot use that relative import.
+ *
+ * This module uses a multi-strategy approach:
+ *   1. Try well-known npm package names (future SDK versions may expose it).
+ *   2. Dynamically locate the OpenClaw install dir and import the stock
+ *      diagnostics-otel api.js which re-exports onDiagnosticEvent.
+ *   3. Fall back to hook-only mode — session lifecycle + gateway events still
+ *      produce useful spans. The built-in diagnostics-otel plugin handles
+ *      model.usage / message.processed spans and exports to the same collector.
  *
  * Trace hierarchy:
  *   tracectrl.request (root — created on message.processed event)
- *   ├── tracectrl.model.usage (child — created on model.usage event)
- *   └── tracectrl.model.usage (additional LLM calls in same session)
+ *   +-- tracectrl.model.usage (child — created on model.usage event)
+ *   +-- tracectrl.model.usage (additional LLM calls in same session)
  */
 
 import {
@@ -24,6 +33,9 @@ import {
 import type { TelemetryRuntime } from "./telemetry.js";
 import type { TraceCtrlConfig } from "./config.js";
 import { analyseMessageContent } from "./security.js";
+import { execSync } from "node:child_process";
+import { realpathSync, existsSync, readdirSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Session context tracking — links spans into parent-child traces
@@ -47,32 +59,150 @@ let onDiagnosticEvent: ((listener: (evt: any) => void) => () => void) | null =
   null;
 let sdkLoaded = false;
 
+/**
+ * Attempts to locate the OpenClaw installation directory by resolving the
+ * `openclaw` binary through the PATH. Returns null if it cannot be found.
+ */
+function findOpenClawInstallDir(logger: any): string | null {
+  try {
+    // `which openclaw` gives us the bin path; resolve symlinks to get the real location
+    const binPath = execSync("which openclaw", { encoding: "utf-8" }).trim();
+    if (!binPath) return null;
+
+    const realBin = realpathSync(binPath);
+    // Typical nvm layout: .../node/v24.x/bin/openclaw -> .../node/v24.x/lib/node_modules/openclaw/...
+    // Walk up from the bin to find the lib/node_modules/openclaw directory
+    let dir = dirname(realBin);
+
+    // Case 1: bin is a direct symlink into the package (e.g. dist/cli.js)
+    // Walk up until we find a package.json with name "openclaw"
+    for (let i = 0; i < 10; i++) {
+      const pkgPath = join(dir, "package.json");
+      if (existsSync(pkgPath)) {
+        try {
+          // @ts-ignore — dynamic require of JSON
+          const pkg = JSON.parse(
+            require("node:fs").readFileSync(pkgPath, "utf-8")
+          );
+          if (pkg.name === "openclaw") {
+            logger.info(`[tracectrl] Found OpenClaw install at ${dir}`);
+            return dir;
+          }
+        } catch {
+          // not the right package.json, keep walking
+        }
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break; // reached filesystem root
+      dir = parent;
+    }
+
+    // Case 2: bin is in a node bin dir, sibling lib dir has node_modules/openclaw
+    const binDir = dirname(realBin);
+    const libCandidate = join(dirname(binDir), "lib", "node_modules", "openclaw");
+    if (existsSync(join(libCandidate, "package.json"))) {
+      logger.info(`[tracectrl] Found OpenClaw install at ${libCandidate}`);
+      return libCandidate;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Finds the diagnostics-otel api.js inside the OpenClaw install directory.
+ * The stock extensions live at <openclaw>/dist/extensions/diagnostics-otel/api.js
+ */
+function findDiagnosticsOtelApi(openclawDir: string, logger: any): string | null {
+  const stockPath = join(openclawDir, "dist", "extensions", "diagnostics-otel", "api.js");
+  if (existsSync(stockPath)) {
+    logger.info(`[tracectrl] Found diagnostics-otel api at ${stockPath}`);
+    return stockPath;
+  }
+
+  // Fallback: search for any api.js under diagnostics-otel
+  const extDir = join(openclawDir, "dist", "extensions");
+  if (existsSync(extDir)) {
+    try {
+      const entries = readdirSync(extDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name.includes("diagnostics")) {
+          const candidate = join(extDir, entry.name, "api.js");
+          if (existsSync(candidate)) {
+            logger.info(`[tracectrl] Found diagnostics api at ${candidate}`);
+            return candidate;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
 async function loadSdk(logger: any): Promise<boolean> {
   if (sdkLoaded) return onDiagnosticEvent !== null;
   sdkLoaded = true;
-  // Try multiple import paths — the SDK location varies by OpenClaw version
-  const importPaths = [
+
+  // Strategy 1: Try well-known npm package names (may work in future SDK versions)
+  const npmPaths = [
     "openclaw/plugin-sdk",
     "openclaw/plugin-sdk/diagnostic-runtime",
     "@openclaw/diagnostics-otel/api",
-    // Relative path from extensions dir (how built-in plugins import it)
-    "../../diagnostic-events-CFyhdc9N.js",
   ];
-  for (const path of importPaths) {
+
+  for (const path of npmPaths) {
     try {
       // @ts-ignore — dynamic runtime imports
       const mod = await import(path);
       if (typeof mod.onDiagnosticEvent === "function") {
         onDiagnosticEvent = mod.onDiagnosticEvent;
-        logger.info(`[tracectrl] Loaded onDiagnosticEvent from ${path}`);
+        logger.info(`[tracectrl] Loaded onDiagnosticEvent from npm: ${path}`);
         return true;
       }
     } catch {
-      // Try next path
+      // not available, try next
     }
   }
+
+  // Strategy 2: Dynamically locate the OpenClaw install and import the stock
+  // diagnostics-otel api.js which re-exports onDiagnosticEvent
+  const openclawDir = findOpenClawInstallDir(logger);
+  if (openclawDir) {
+    const apiPath = findDiagnosticsOtelApi(openclawDir, logger);
+    if (apiPath) {
+      try {
+        // Use file:// URL for ESM dynamic import compatibility
+        const fileUrl = `file://${apiPath}`;
+        // @ts-ignore — dynamic runtime import of absolute file path
+        const mod = await import(fileUrl);
+        if (typeof mod.onDiagnosticEvent === "function") {
+          onDiagnosticEvent = mod.onDiagnosticEvent;
+          logger.info(
+            `[tracectrl] Loaded onDiagnosticEvent from stock plugin: ${apiPath}`
+          );
+          return true;
+        }
+        logger.warn(
+          `[tracectrl] diagnostics-otel api.js loaded but onDiagnosticEvent not found in exports`
+        );
+      } catch (err) {
+        logger.warn(
+          `[tracectrl] Could not import diagnostics-otel api.js: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
+  }
+
+  // Strategy 3: Fall back gracefully — hook-only mode
   logger.warn(
-    "[tracectrl] onDiagnosticEvent not available — using registerHook fallback"
+    "[tracectrl] onDiagnosticEvent not available — running in hook-only mode. " +
+      "Enable the built-in diagnostics-otel plugin alongside tracectrl for " +
+      "model.usage and message.processed spans."
   );
   return false;
 }
@@ -81,29 +211,28 @@ async function loadSdk(logger: any): Promise<boolean> {
 // Main registration
 // ---------------------------------------------------------------------------
 
-export function registerHooks(
+export async function registerHooks(
   api: any,
   telemetry: TelemetryRuntime,
   config: TraceCtrlConfig
-): void {
+): Promise<void> {
   const { tracer, counters, histograms } = telemetry;
   const logger = api.logger;
 
   // -------------------------------------------------------------------
-  // Strategy 1: Diagnostic events (works reliably in all OpenClaw versions)
+  // Strategy 1: Diagnostic events (richest telemetry — model usage, etc.)
   // -------------------------------------------------------------------
 
-  loadSdk(logger).then((hasDiagnostics) => {
-    if (hasDiagnostics && onDiagnosticEvent) {
-      registerDiagnosticListeners(
-        tracer,
-        counters,
-        histograms,
-        config,
-        logger
-      );
-    }
-  });
+  const hasDiagnostics = await loadSdk(logger);
+  if (hasDiagnostics && onDiagnosticEvent) {
+    registerDiagnosticListeners(
+      tracer,
+      counters,
+      histograms,
+      config,
+      logger
+    );
+  }
 
   // -------------------------------------------------------------------
   // Strategy 2: Event-stream hooks via api.registerHook (always available)
@@ -154,6 +283,11 @@ export function registerHooks(
         try {
           const span = tracer.startSpan("tracectrl.gateway.startup", {
             kind: SpanKind.INTERNAL,
+            attributes: {
+              "tracectrl.diagnostic_events": hasDiagnostics
+                ? "active"
+                : "unavailable",
+            },
           });
           span.setStatus({ code: SpanStatusCode.OK });
           span.end();
@@ -190,7 +324,8 @@ export function registerHooks(
               "tracectrl.channel": channel,
               "tracectrl.session.key": sessionKey,
               "tracectrl.message.direction": "inbound",
-              "tracectrl.message.from": event?.from ?? event?.senderId ?? "unknown",
+              "tracectrl.message.from":
+                event?.from ?? event?.senderId ?? "unknown",
             },
           });
 
@@ -219,7 +354,9 @@ export function registerHooks(
       },
       { priority: 100 }
     );
-    logger.info("[tracectrl] Registered message_received hook (may not fire in all versions)");
+    logger.info(
+      "[tracectrl] Registered message_received hook (may not fire in all versions)"
+    );
   } catch {
     // api.on may not accept this event name — that's OK
   }
@@ -244,7 +381,9 @@ export function registerHooks(
       },
       { priority: -100 }
     );
-    logger.info("[tracectrl] Registered agent_end hook (may not fire in all versions)");
+    logger.info(
+      "[tracectrl] Registered agent_end hook (may not fire in all versions)"
+    );
   } catch {
     // ignore
   }
@@ -253,11 +392,12 @@ export function registerHooks(
   // Periodic cleanup of stale session contexts (5 min TTL)
   // -------------------------------------------------------------------
 
-  setInterval(() => {
+  const cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [key, ctx] of sessionContextMap) {
       if (now - ctx.startTime > 5 * 60 * 1000) {
         try {
+          ctx.rootSpan.setStatus({ code: SpanStatusCode.OK });
           ctx.rootSpan.end();
         } catch {
           // ignore
@@ -267,7 +407,14 @@ export function registerHooks(
     }
   }, 60_000);
 
-  logger.info("[tracectrl] All hooks registered");
+  // Allow the Node.js process to exit even if this timer is still running
+  if (cleanupInterval.unref) {
+    cleanupInterval.unref();
+  }
+
+  logger.info(
+    `[tracectrl] All hooks registered (diagnostic_events=${hasDiagnostics ? "active" : "unavailable"})`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,11 +430,11 @@ function registerDiagnosticListeners(
 ): void {
   if (!onDiagnosticEvent) return;
 
-  onDiagnosticEvent((evt: any) => {
+  const unsubscribe = onDiagnosticEvent((evt: any) => {
     try {
       const type = evt?.type;
 
-      // ── message.processed ──────────────────────────────────────
+      // -- message.processed ------------------------------------------------
       if (type === "message.processed") {
         const sessionKey = evt.sessionKey ?? "unknown";
         const channel = evt.channel ?? "unknown";
@@ -336,7 +483,7 @@ function registerDiagnosticListeners(
         }, 2000);
       }
 
-      // ── model.usage ────────────────────────────────────────────
+      // -- model.usage ------------------------------------------------------
       if (type === "model.usage") {
         const sessionKey = evt.sessionKey ?? "unknown";
         const model = evt.model ?? "unknown";
@@ -423,14 +570,14 @@ function registerDiagnosticListeners(
         );
       }
 
-      // ── webhook.received ───────────────────────────────────────
+      // -- webhook.received -------------------------------------------------
       if (type === "webhook.received") {
         counters.messagesReceived.add(1, {
           "tracectrl.channel": evt.channel ?? "unknown",
         });
       }
 
-      // ── webhook.error ──────────────────────────────────────────
+      // -- webhook.error ----------------------------------------------------
       if (type === "webhook.error") {
         const span = tracer.startSpan("tracectrl.webhook.error", {
           kind: SpanKind.INTERNAL,
@@ -446,7 +593,7 @@ function registerDiagnosticListeners(
         span.end();
       }
 
-      // ── session.stuck ──────────────────────────────────────────
+      // -- session.stuck ----------------------------------------------------
       if (type === "session.stuck") {
         const span = tracer.startSpan("tracectrl.session.stuck", {
           kind: SpanKind.INTERNAL,
