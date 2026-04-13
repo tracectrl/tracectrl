@@ -444,9 +444,9 @@ class ScanScreen(Screen):
             results = run_all(config, root)
             self.state.scan_results = results
             self.state.scan_root = root
-            self.call_from_thread(self._show_results, results)
+            self.app.call_from_thread(self._show_results, results)
         except Exception as e:
-            self.call_from_thread(self._show_scan_error, str(e))
+            self.app.call_from_thread(self._show_scan_error, str(e))
 
     def _show_scan_error(self, message: str) -> None:
         self.query_one("#scan-loading").display = False
@@ -544,13 +544,13 @@ class ScanScreen(Screen):
             applied = apply_fixes(config, config_path, automatable)
 
             for fix in applied:
-                self.call_from_thread(
+                self.app.call_from_thread(
                     self._log_fix,
                     f"[#00CC66]✓[/] {fix['check_id']}: {fix['description']}",
                 )
 
             if manual:
-                self.call_from_thread(
+                self.app.call_from_thread(
                     self._log_fix,
                     f"[#FFBB00]![/] {len(manual)} finding(s) require manual remediation",
                 )
@@ -558,9 +558,9 @@ class ScanScreen(Screen):
             new_config = parse_config(self.state.scan_root)
             new_results = run_all(new_config, self.state.scan_root)
             self.state.scan_results = new_results
-            self.call_from_thread(self._show_results, new_results)
+            self.app.call_from_thread(self._show_results, new_results)
         except Exception as e:
-            self.call_from_thread(self._show_scan_error, str(e))
+            self.app.call_from_thread(self._show_scan_error, str(e))
 
     def _log_fix(self, message: str) -> None:
         log = self.query_one("#scan-fix-log", RichLog)
@@ -729,23 +729,23 @@ class DockerScreen(Screen):
                 text=True,
             )
             for line in proc.stdout:
-                self.call_from_thread(self._log, line.rstrip())
+                self.app.call_from_thread(self._log, line.rstrip())
             proc.wait(timeout=180)
 
             if proc.returncode == 0:
-                self.call_from_thread(self._on_compose_success)
+                self.app.call_from_thread(self._on_compose_success)
             else:
-                self.call_from_thread(
+                self.app.call_from_thread(
                     self._log,
                     f"[bold red]✗ docker compose exited with code {proc.returncode}[/]",
                 )
         except subprocess.TimeoutExpired:
-            self.call_from_thread(
+            self.app.call_from_thread(
                 self._log,
                 "[bold yellow]⚠ Timeout waiting for docker compose. Check manually.[/]",
             )
         except FileNotFoundError:
-            self.call_from_thread(
+            self.app.call_from_thread(
                 self._log,
                 "[bold yellow]⚠ Docker not found. Install Docker and run 'docker compose up -d' manually.[/]",
             )
@@ -772,17 +772,17 @@ class DockerScreen(Screen):
                     resp = urllib.request.urlopen(req, timeout=3)
                     if resp.status < 400:
                         self._healthy_services.add(name)
-                        self.call_from_thread(
+                        self.app.call_from_thread(
                             self._log,
                             f"  [#00CC66]✓[/] {name} is healthy",
                         )
                 except Exception:
                     all_healthy = False
 
-            self.call_from_thread(self._update_health_panel)
+            self.app.call_from_thread(self._update_health_panel)
 
             if len(self._healthy_services) == len(self.HEALTH_ENDPOINTS):
-                self.call_from_thread(self._all_healthy)
+                self.app.call_from_thread(self._all_healthy)
                 return
 
             time.sleep(2)
@@ -792,11 +792,11 @@ class DockerScreen(Screen):
             name for name, _, _ in self.HEALTH_ENDPOINTS
             if name not in self._healthy_services
         ]
-        self.call_from_thread(
+        self.app.call_from_thread(
             self._log,
             f"[bold yellow]⚠ Timed out waiting for: {', '.join(missing)}[/]",
         )
-        self.call_from_thread(self._enable_dashboard)
+        self.app.call_from_thread(self._enable_dashboard)
 
     def _update_health_panel(self) -> None:
         lines = []
