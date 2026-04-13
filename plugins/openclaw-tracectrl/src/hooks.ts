@@ -51,6 +51,7 @@ async function loadSdk(logger: any): Promise<boolean> {
   if (sdkLoaded) return onDiagnosticEvent !== null;
   sdkLoaded = true;
   try {
+    // @ts-ignore — openclaw SDK only available at runtime inside the gateway
     const sdk = await import("openclaw/plugin-sdk");
     if (typeof sdk.onDiagnosticEvent === "function") {
       onDiagnosticEvent = sdk.onDiagnosticEvent;
@@ -58,6 +59,7 @@ async function loadSdk(logger: any): Promise<boolean> {
       return true;
     }
     // Try alternate path
+    // @ts-ignore — openclaw SDK only available at runtime inside the gateway
     const diag = await import("openclaw/plugin-sdk/diagnostic-runtime");
     if (typeof diag.onDiagnosticEvent === "function") {
       onDiagnosticEvent = diag.onDiagnosticEvent;

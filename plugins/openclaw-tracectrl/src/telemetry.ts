@@ -29,6 +29,7 @@ export interface TelemetryCounters {
   tokensPrompt: Counter;
   tokensCompletion: Counter;
   securityEvents: Counter;
+  sessionResets: Counter;
 }
 
 export interface TelemetryHistograms {
@@ -126,6 +127,9 @@ export function initTelemetry(
     }),
     securityEvents: meter.createCounter("tracectrl.security.events", {
       description: "Security-relevant events detected",
+    }),
+    sessionResets: meter.createCounter("tracectrl.session.resets", {
+      description: "Session reset events",
     }),
   };
 
