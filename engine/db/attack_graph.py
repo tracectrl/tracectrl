@@ -12,9 +12,21 @@ def upsert_attack_paths(paths: list[dict]):
     rows = []
     for p in paths:
         rows.append((
-            p["path_id"], p["rule_name"], p["owasp_category"],
-            p["agents_involved"], json.dumps(p["path_steps"]),
-            p["risk_score"], p["severity"], now, now,
+            p["path_id"],
+            p["rule_id"],
+            p["rule_name"],
+            p["severity"],
+            p["owasp_tag"],
+            p["title"],
+            p["description"],
+            p["agent_id"],
+            p["agents_involved"],
+            p["path_nodes"],
+            p["path_edges"],
+            json.dumps(p["path_steps"]),
+            p["risk_score"],
+            now,
+            now,
         ))
     execute("INSERT INTO attack_paths VALUES", rows)
 
@@ -43,13 +55,13 @@ def upsert_system_risk(risk: dict):
 
 def get_attack_paths(service: str | None = None) -> list[dict]:
     rows = execute(
-        """SELECT path_id, rule_name, owasp_category, agents_involved,
-                  path_steps, risk_score, severity, computed_at
+        """SELECT path_id, rule_name, owasp_tag, agents_involved,
+                  path_nodes, path_edges, path_steps, risk_score, severity, detected_at
            FROM attack_paths FINAL
            ORDER BY risk_score DESC"""
     )
-    columns = ["path_id", "rule_name", "owasp_category", "agents_involved",
-               "path_steps", "risk_score", "severity", "computed_at"]
+    columns = ["path_id", "rule_name", "owasp_tag", "agents_involved",
+               "path_nodes", "path_edges", "path_steps", "risk_score", "severity", "detected_at"]
     results = []
     for row in rows:
         d = dict(zip(columns, row))

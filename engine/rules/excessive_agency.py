@@ -13,6 +13,10 @@ class ExcessiveAgencyRule(BaseRule):
 
     def evaluate(self, agents, tool_edges, agent_edges,
                  injection_results: list[RuleResult] | None = None):
+        # DISABLED: This rule creates standalone "vulnerability" findings without showing
+        # the actual attack path from ingress. These are now covered by ingressToEndpointRule.
+        return []
+
         if not injection_results:
             return []
 
@@ -32,9 +36,13 @@ class ExcessiveAgencyRule(BaseRule):
             for tool_edge in high_risk_tools:
                 tool_name = tool_edge["tool_name"]
                 tool_category = tool_edge["tool_category"]
+                edge_id = tool_edge["edge_id"]
                 results.append(RuleResult(
                     rule_name="vulnerableToExcessiveAgency",
+                    rule_id="excessive_agency",
                     owasp_category="ASI02",
+                    title="Excessive Agency Vulnerability",
+                    description=f"Agent '{agent['name']}' is vulnerable to prompt injection and has access to high-risk tool '{tool_name}' ({tool_category}), enabling excessive agency attacks.",
                     agents_involved=[agent_id],
                     steps=[
                         AttackStep(agent_id, "agent", "prompt_injection",
@@ -43,5 +51,7 @@ class ExcessiveAgencyRule(BaseRule):
                                    f"Has {tool_category} tool '{tool_name}'"),
                     ],
                     base_cvss=8.1,
+                    path_nodes=["external_input", agent_id, f"tool:{tool_name}"],
+                    path_edges=[edge_id],
                 ))
         return results

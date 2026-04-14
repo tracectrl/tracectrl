@@ -3,8 +3,9 @@
 import hashlib
 from contextvars import ContextVar
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
+from opentelemetry import trace as trace_api
 from tracectrl import schema
-from tracectrl.inference import infer_tool_category
+from tracectrl.inference import infer_tool_category, infer_tool_direction, infer_trigger_type
 from tracectrl.session import current_session_id
 
 _span_sequence: ContextVar[int] = ContextVar("tracectrl_span_sequence", default=0)
@@ -27,6 +28,23 @@ class TraceCtrlSpanProcessor(SpanProcessor):
         session_id = current_session_id()
         if session_id:
             span.set_attribute(schema.TC_SESSION_ID, session_id)
+
+        # Auto-detect ingress: spans with no parent trace context
+        if parent_context:
+            span_context = trace_api.get_current_span(parent_context).get_span_context()
+            if not span_context or not span_context.is_valid:
+                # Root span - mark as ingress
+                span.set_attribute(schema.TC_INGRESS, True)
+                # Try to infer trigger type from span name
+                trigger_type = infer_trigger_type(span.name if hasattr(span, 'name') else "")
+                if trigger_type:
+                    span.set_attribute(schema.TC_TRIGGER_TYPE, trigger_type)
+        else:
+            # No parent context provided - likely a root span
+            span.set_attribute(schema.TC_INGRESS, True)
+            trigger_type = infer_trigger_type(span.name if hasattr(span, 'name') else "")
+            if trigger_type:
+                span.set_attribute(schema.TC_TRIGGER_TYPE, trigger_type)
 
     def on_end(self, span: ReadableSpan):
         attrs = span.attributes or {}
@@ -81,13 +99,17 @@ class TraceCtrlSpanProcessor(SpanProcessor):
             if agno_session:
                 _set(schema.TC_SESSION_ID, agno_session)
 
-        # Tool category inference — keep result in local var since attrs is immutable snapshot
+        # Tool category and direction inference — keep result in local var since attrs is immutable snapshot
         tool_name = attrs.get(schema.TOOL_NAME, "")
         tool_desc = attrs.get(schema.TOOL_DESCRIPTION, "")
         computed_tool_cat = ""
         if tool_name:
             computed_tool_cat = infer_tool_category(tool_name, tool_desc)
             _set(schema.TC_TOOL_CATEGORY, computed_tool_cat)
+
+            # Infer tool direction (input/output/internal)
+            tool_direction = infer_tool_direction(tool_name, tool_desc)
+            _set(schema.TC_TOOL_DIRECTION, tool_direction)
 
         # System prompt hash (16 hex chars = 64-bit, balances collision resistance + storage)
         system_prompt = attrs.get(schema.LLM_SYSTEM, "")

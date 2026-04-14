@@ -67,21 +67,27 @@ CREATE TABLE IF NOT EXISTS tracectrl.pipeline_state (
 INSERT INTO tracectrl.pipeline_state (key, value, updated_at)
 VALUES ('last_processed_at', toString(now() - INTERVAL 24 HOUR), now());
 
--- Attack paths discovered by TAGAAI rules
+-- Attack paths with enhanced schema (merged implementation)
 CREATE TABLE IF NOT EXISTS tracectrl.attack_paths (
-    path_id         String,
-    rule_name       String,
-    owasp_category  String,
-    agents_involved Array(String),
-    path_steps      String,
-    risk_score      Float32,
-    severity        String,
-    computed_at     DateTime,
-    updated_at      DateTime
+    path_id          String,
+    rule_id          String,
+    rule_name        String,
+    severity         String,       -- CRITICAL | HIGH | MEDIUM | LOW
+    owasp_tag        String,       -- e.g. ASI01, ASI02
+    title            String,
+    description      String,
+    agent_id         String,       -- Primary agent involved
+    agents_involved  Array(String), -- All agents in path
+    path_nodes       Array(String), -- Node IDs in order
+    path_edges       Array(String), -- Edge IDs forming path
+    path_steps       String,        -- JSON of detailed steps
+    risk_score       Float32,
+    detected_at      DateTime,
+    updated_at       DateTime
 ) ENGINE = ReplacingMergeTree(updated_at)
   ORDER BY path_id;
 
--- Per-agent risk scores
+-- Per-agent risk scores (Sprint 2)
 CREATE TABLE IF NOT EXISTS tracectrl.agent_risk_scores (
     agent_id        String,
     risk_score      Float32,
@@ -93,7 +99,7 @@ CREATE TABLE IF NOT EXISTS tracectrl.agent_risk_scores (
 ) ENGINE = ReplacingMergeTree(updated_at)
   ORDER BY agent_id;
 
--- System-wide risk summary (single row)
+-- System-wide risk summary (Sprint 2)
 CREATE TABLE IF NOT EXISTS tracectrl.system_risk (
     id              UInt8 DEFAULT 1,
     risk_score      Float32,

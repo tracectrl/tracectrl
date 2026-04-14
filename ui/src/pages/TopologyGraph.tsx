@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import GraphCanvas from '../components/GraphCanvas'
 import SidebarPanel from '../components/SidebarPanel'
 import PhaseReplaySlider from '../components/PhaseReplaySlider'
-import { fetchTopologyGraph, TopologyGraph, TopologyNode } from '../api/client'
+import AttackFindingsPanel from '../components/AttackFindingsPanel'
+import { fetchTopologyGraph, TopologyGraph, TopologyNode, fetchAttackPaths, fetchAttackOverlay, AttackPath, AttackOverlay } from '../api/client'
 import { fetchLatestSpans, SpanDetail } from '../api/sessions'
 import { fetchAgentRisks, AgentRisk } from '../api/risk'
 import { usePhaseInference } from '../hooks/usePhaseInference'
@@ -19,6 +20,10 @@ export default function TopologyGraphPage() {
   const [showAttackerView, setShowAttackerView] = useState(false)
   const [agentRisks, setAgentRisks] = useState<AgentRisk[]>([])
   const [replayNs, setReplayNs] = useState<number | null>(null)
+  const [attackMode, setAttackMode] = useState(false)
+  const [attackPaths, setAttackPaths] = useState<AttackPath[]>([])
+  const [overlay, setOverlay] = useState<AttackOverlay | null>(null)
+  const [selectedAttackPath, setSelectedAttackPath] = useState<AttackPath | null>(null)
 
   useEffect(() => { document.title = 'Topology — TraceCtrl' }, [])
 
@@ -32,6 +37,14 @@ export default function TopologyGraphPage() {
     fetchLatestSpans(selectedProject).then(setLatestSpans).catch(() => {})
     fetchAgentRisks(selectedProject).then(setAgentRisks).catch(() => {})
   }, [selectedProject])
+
+  // Fetch attack data when attack mode is toggled on
+  useEffect(() => {
+    if (attackMode) {
+      fetchAttackPaths().then(setAttackPaths).catch(() => {})
+      fetchAttackOverlay().then(setOverlay).catch(() => {})
+    }
+  }, [attackMode])
 
   const handleNodeSelect = useCallback((node: TopologyNode | null) => {
     setSelectedNode(node)
@@ -108,6 +121,14 @@ export default function TopologyGraphPage() {
             </button>
           )}
           {!loading && graph && (
+            <button
+              className={`phase-toggle${attackMode ? ' active' : ''}`}
+              onClick={() => setAttackMode(prev => !prev)}
+            >
+              Attack Surface
+            </button>
+          )}
+          {!loading && graph && (
             <div className="live-indicator">Live</div>
           )}
         </div>
@@ -142,6 +163,9 @@ export default function TopologyGraphPage() {
         showPhases={showPhases}
         attackerView={showAttackerView}
         agentRisks={agentRisks}
+        attackMode={attackMode}
+        overlay={overlay}
+        selectedAttackPath={selectedAttackPath}
       />
 
       {latestSpans.length > 0 && traceDurationNs > 0 && (
@@ -154,7 +178,19 @@ export default function TopologyGraphPage() {
         />
       )}
 
-      <SidebarPanel node={selectedNode} onClose={() => setSelectedNode(null)} />
+      {attackMode ? (
+        <AttackFindingsPanel
+          paths={attackPaths}
+          selectedPath={selectedAttackPath}
+          onPathSelect={setSelectedAttackPath}
+          onClose={() => {
+            setAttackMode(false)
+            setSelectedAttackPath(null)
+          }}
+        />
+      ) : (
+        <SidebarPanel node={selectedNode} onClose={() => setSelectedNode(null)} />
+      )}
     </div>
   )
 }

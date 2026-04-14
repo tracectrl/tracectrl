@@ -7,14 +7,21 @@ services:
       target: dev
     volumes:
       - ./engine:/app
+    ports:
+      - "8000:8000"
     environment:
       - RELOAD=true
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_DB=tracectrl
+      - PIPELINE_INTERVAL_SECONDS=60
     command: ["uvicorn", "engine.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   tracectrl-ui:
     build:
       context: ./ui
       dockerfile: Dockerfile
+      target: dev
     volumes:
       - ./ui:/app
       - /app/node_modules

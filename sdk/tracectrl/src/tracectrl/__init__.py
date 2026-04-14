@@ -8,3 +8,4 @@ __path__ = extend_path(__path__, __name__)
 __version__ = "0.1.0"
 
 from tracectrl.config import configure  # noqa: F401
+from tracectrl.context import ingress  # noqa: F401

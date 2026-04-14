@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import cytoscape, { Core } from 'cytoscape'
 import dagre from 'cytoscape-dagre'
-import { TopologyGraph, TopologyNode } from '../api/client'
+import { TopologyGraph, TopologyNode, AttackOverlay, AttackPath } from '../api/client'
 import { AgentRisk } from '../api/risk'
 import { PhaseGroup } from '../hooks/usePhaseInference'
 
@@ -15,6 +15,9 @@ interface GraphCanvasProps {
   showPhases?: boolean
   attackerView?: boolean
   agentRisks?: AgentRisk[]
+  attackMode?: boolean
+  overlay?: AttackOverlay | null
+  selectedAttackPath?: AttackPath | null
 }
 
 /**
@@ -26,6 +29,7 @@ function buildElements(
   data: TopologyGraph,
   phaseGroups: PhaseGroup[] | undefined,
   showPhases: boolean,
+  showReturnEdges: boolean,
 ): cytoscape.ElementDefinition[] {
   const elements: cytoscape.ElementDefinition[] = []
 
@@ -82,17 +86,28 @@ function buildElements(
     })
   }
 
-  // Add regular edges
+  // Add regular edges (always include all edges, we control visibility with styles)
   for (const e of data.edges) {
+    let edgeLabel = ''
+    if (e.type === 'agent_to_tool') {
+      edgeLabel = 'uses'
+    } else if (e.type === 'agent_return') {
+      edgeLabel = 'returns'
+    } else if (e.type === 'tool_return') {
+      edgeLabel = 'returns'
+    } else if (e.type === 'ingress_to_agent') {
+      edgeLabel = 'triggers'
+    } else {
+      edgeLabel = e.channel === 'team_member' ? 'delegates' : 'calls'
+    }
+
     elements.push({
       data: {
         id: e.id,
         source: e.source,
         target: e.target,
         edgeType: e.type,
-        edgeLabel: e.type === 'agent_to_tool'
-          ? 'uses'
-          : (e.channel === 'team_member' ? 'delegates' : 'calls'),
+        edgeLabel,
         callCount: e.call_count,
         channel: e.channel,
       },
@@ -103,15 +118,26 @@ function buildElements(
 }
 
 export default function GraphCanvas({
-  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks,
+  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks, attackMode, overlay, selectedAttackPath
 }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
   const onNodeSelectRef = useRef(onNodeSelect)
   onNodeSelectRef.current = onNodeSelect
 
+  // State for toggling return edges (show them in attack mode, hide by default otherwise)
+  const [showReturnEdges, setShowReturnEdges] = useState(false)
+
+  // Auto-show return edges in attack mode
+  useEffect(() => {
+    if (attackMode) {
+      setShowReturnEdges(true)
+    }
+  }, [attackMode])
+
   // Rebuild the graph when data OR showPhases changes
   // (showPhases changes the element structure — compound nodes)
+  // Always include return edges but control visibility with styles
   useEffect(() => {
     if (!containerRef.current || !data || data.nodes.length === 0) return
 
@@ -120,7 +146,8 @@ export default function GraphCanvas({
       cyRef.current = null
     }
 
-    const elements = buildElements(data, phaseGroups, !!showPhases)
+    // Always build with return edges, we'll control visibility with styles
+    const elements = buildElements(data, phaseGroups, !!showPhases, true)
 
     cyRef.current = cytoscape({
       container: containerRef.current,
@@ -191,6 +218,28 @@ export default function GraphCanvas({
             'border-color': 'rgba(34, 197, 94, 0.3)',
           },
         },
+        // Ingress nodes — purple/orange diamond shapes for entry points
+        {
+          selector: 'node[nodeType="ingress"]',
+          style: {
+            'background-color': '#F97316',
+            'label': 'data(label)',
+            'color': '#F5F5F5',
+            'font-size': '11px',
+            'font-weight': 600,
+            'font-family': "'JetBrains Mono', monospace",
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-wrap': 'wrap',
+            'text-max-width': '100px',
+            'width': 'label',
+            'height': 40,
+            'padding': '14px',
+            'shape': 'diamond',
+            'border-width': 2,
+            'border-color': 'rgba(249, 115, 22, 0.5)',
+          },
+        },
         // Phase flow edges — bright, visible "then" arrows
         {
           selector: 'edge[edgeType="phase_flow"]',
@@ -216,7 +265,7 @@ export default function GraphCanvas({
             'text-background-shape': 'roundrectangle' as any,
           },
         },
-        // Agent-to-agent edges — solid, visible
+        // Agent-to-agent edges — solid, visible (delegation)
         {
           selector: 'edge[edgeType="agent_to_agent"]',
           style: {
@@ -238,6 +287,58 @@ export default function GraphCanvas({
             'text-background-shape': 'roundrectangle' as any,
           },
         },
+        // Agent return edges — dashed, lighter (data flow back)
+        {
+          selector: 'edge[edgeType="agent_return"]',
+          style: {
+            'line-color': '#888888',
+            'target-arrow-color': '#888888',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier',
+            'line-style': 'dashed',
+            'line-dash-pattern': [5, 5],
+            'width': 1.5,
+            'opacity': 0.5,
+            'display': 'none',  // Hidden by default, shown when showReturnEdges=true
+            'label': 'data(edgeLabel)',
+            'font-size': '9px',
+            'font-family': "'Poppins', sans-serif",
+            'color': '#888888',
+            'text-rotation': 'autorotate',
+            'text-margin-y': -10,
+            'text-background-color': '#0A0A0A',
+            'text-background-opacity': 0.7,
+            'text-background-padding': '2px',
+            'text-background-shape': 'roundrectangle' as any,
+          },
+        },
+        // Tool return edges — dashed, lighter (data flow back from tools)
+        {
+          selector: 'edge[edgeType="tool_return"]',
+          style: {
+            'line-color': '#999999',
+            'target-arrow-color': '#999999',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'unbundled-bezier',
+            'control-point-distances': 30,
+            'control-point-weights': 0.5,
+            'line-style': 'dashed',
+            'line-dash-pattern': [5, 5],
+            'width': 1.5,
+            'opacity': 0.5,
+            'display': 'none',  // Hidden by default, shown when showReturnEdges=true
+            'label': 'data(edgeLabel)',
+            'font-size': '9px',
+            'font-family': "'Poppins', sans-serif",
+            'color': '#999999',
+            'text-rotation': 'autorotate',
+            'text-margin-y': -10,
+            'text-background-color': '#0A0A0A',
+            'text-background-opacity': 0.7,
+            'text-background-padding': '2px',
+            'text-background-shape': 'roundrectangle' as any,
+          },
+        },
         // Agent-to-tool edges — dashed, white arrows
         {
           selector: 'edge[edgeType="agent_to_tool"]',
@@ -245,7 +346,7 @@ export default function GraphCanvas({
             'line-color': '#CCCCCC',
             'target-arrow-color': '#CCCCCC',
             'target-arrow-shape': 'triangle',
-            'curve-style': 'bezier',
+            'curve-style': 'straight',
             'line-style': 'dashed',
             'line-dash-pattern': [6, 4],
             'width': 1.5,
@@ -258,6 +359,29 @@ export default function GraphCanvas({
             'text-margin-y': -10,
             'text-background-color': '#0A0A0A',
             'text-background-opacity': 0.8,
+            'text-background-padding': '3px',
+            'text-background-shape': 'roundrectangle' as any,
+          },
+        },
+        // Ingress-to-agent edges — bold orange arrows indicating entry points
+        {
+          selector: 'edge[edgeType="ingress_to_agent"]',
+          style: {
+            'line-color': '#F97316',
+            'target-arrow-color': '#F97316',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier',
+            'width': 2.5,
+            'opacity': 0.9,
+            'label': 'data(edgeLabel)',
+            'font-size': '10px',
+            'font-weight': 600,
+            'font-family': "'JetBrains Mono', monospace",
+            'color': '#F97316',
+            'text-rotation': 'autorotate',
+            'text-margin-y': -10,
+            'text-background-color': '#0A0A0A',
+            'text-background-opacity': 0.85,
             'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle' as any,
           },
@@ -275,11 +399,13 @@ export default function GraphCanvas({
       layout: {
         name: 'dagre',
         rankDir: 'TB',
-        nodeSep: 50,
-        rankSep: showPhases ? 60 : 80,
+        nodeSep: 100,
+        rankSep: 70,
         animate: false,
         fit: true,
-        padding: 40,
+        padding: 80,
+        ranker: 'tight-tree',
+        edgeSep: 20,
       } as any,
       minZoom: 0.3,
       maxZoom: 3,
@@ -299,11 +425,66 @@ export default function GraphCanvas({
       }
     })
 
+    // Drag agent nodes to move their tools along
+    cyRef.current.on('grab', 'node[nodeType="agent"]', (evt) => {
+      const agent = evt.target
+      // Store agent's starting position
+      agent.data('dragStartPos', { x: agent.position().x, y: agent.position().y })
+
+      // Store all connected tools' starting positions (only once!)
+      agent.connectedEdges('[edgeType="agent_to_tool"]').targets('[nodeType="tool"]').forEach((tool: any) => {
+        tool.data('toolStartPos', { x: tool.position().x, y: tool.position().y })
+      })
+    })
+
+    cyRef.current.on('drag', 'node[nodeType="agent"]', (evt) => {
+      const agent = evt.target
+      const startPos = agent.data('dragStartPos')
+      if (!startPos) return
+
+      // Calculate how far agent has moved from start
+      const deltaX = agent.position().x - startPos.x
+      const deltaY = agent.position().y - startPos.y
+
+      // Move tools by same delta from THEIR stored start positions
+      agent.connectedEdges('[edgeType="agent_to_tool"]').targets('[nodeType="tool"]').forEach((tool: any) => {
+        const toolStartPos = tool.data('toolStartPos')
+        if (toolStartPos) {
+          tool.position({
+            x: toolStartPos.x + deltaX,
+            y: toolStartPos.y + deltaY
+          })
+        }
+      })
+    })
+
+    cyRef.current.on('free', 'node[nodeType="agent"]', (evt) => {
+      const agent = evt.target
+      agent.removeData('dragStartPos')
+      // Clean up tool start positions
+      agent.connectedEdges('[edgeType="agent_to_tool"]').targets('[nodeType="tool"]').forEach((tool: any) => {
+        tool.removeData('toolStartPos')
+      })
+    })
+
     return () => {
       cyRef.current?.destroy()
       cyRef.current = null
     }
-  }, [data, showPhases, phaseGroups])
+  }, [data, showPhases, phaseGroups])  // Removed showReturnEdges and attackMode - we handle them separately
+
+  // Toggle return edge visibility without rebuilding graph
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+
+    const returnEdges = cy.edges('[edgeType="agent_return"], [edgeType="tool_return"]')
+    if (showReturnEdges || attackMode) {
+      returnEdges.style('display', 'element')  // Show return edges
+    } else {
+      returnEdges.style('display', 'none')  // Hide return edges
+    }
+  }, [showReturnEdges, attackMode])
 
   // Highlight effect
   useEffect(() => {
@@ -372,6 +553,95 @@ export default function GraphCanvas({
     cy.endBatch()
   }, [attackerView, agentRisks])
 
+  // Attack mode styling effect
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+
+    if (attackMode && overlay) {
+      cy.startBatch()
+
+      if (selectedAttackPath) {
+        // DETAIL MODE: Specific path selected - highlight only that path
+
+        // Reset all node styles (clear overview mode highlighting)
+        cy.nodes().removeStyle('border-color border-width')
+
+        // Dim all edges
+        cy.edges().style({ opacity: 0.15 })
+
+        // Build set of nodes and edges in the selected path
+        const pathNodes = new Set(selectedAttackPath.path_nodes)
+        const pathEdges = new Set(selectedAttackPath.path_edges)
+
+        // Highlight nodes in the path
+        pathNodes.forEach(nodeId => {
+          const node = cy.$(`#${nodeId}`)
+          if (node.length > 0 && node.data('nodeType') === 'agent') {
+            node.style({
+              'border-color': '#EF4444',
+              'border-width': 4,
+            })
+          }
+        })
+
+        // Highlight edges in the path by matching edge IDs
+        pathEdges.forEach(edgeId => {
+          const edge = cy.$(`#${edgeId}`)
+          if (edge.length > 0) {
+            edge.style({
+              'line-color': '#EF4444',
+              'target-arrow-color': '#EF4444',
+              'width': 3,
+              'opacity': 1,
+            })
+          }
+        })
+
+      } else {
+        // OVERVIEW MODE: No specific path selected - show at-risk overview
+
+        // Don't dim edges in overview mode - keep normal opacity
+        cy.edges().removeStyle('opacity')
+
+        // Add red borders to at-risk agents
+        overlay.compromised_nodes.forEach(({ node_id }) => {
+          const node = cy.$(`#${node_id}`)
+          if (node.length > 0 && node.data('nodeType') === 'agent') {
+            node.style({
+              'border-color': '#EF4444',
+              'border-width': 3,
+            })
+          }
+        })
+
+        // Add alert icons to risky ingress points
+        // Check which ingress nodes have attack edges
+        const riskyIngressNodes = new Set<string>()
+        overlay.attack_edges.forEach(({ source }) => {
+          if (source.startsWith('ingress:')) {
+            riskyIngressNodes.add(source)
+          }
+        })
+
+        riskyIngressNodes.forEach(nodeId => {
+          const node = cy.$(`#${nodeId}`)
+          if (node.length > 0) {
+            node.style({
+              'border-color': '#EF4444',
+              'border-width': 4,
+            })
+          }
+        })
+      }
+
+      cy.endBatch()
+    } else {
+      // Restore original styles when attack mode is off
+      cy.elements().removeStyle()
+    }
+  }, [attackMode, overlay, selectedAttackPath])
+
   return (
     <div className="graph-canvas-wrapper" role="img" aria-label={`Agent topology graph with ${data?.nodes.length ?? 0} nodes and ${data?.edges.length ?? 0} edges`}>
       <div className="sr-only">
@@ -381,6 +651,39 @@ export default function GraphCanvas({
         {data?.nodes.filter(n => n.type === 'agent').map(n => n.label).join(', ')}
       </div>
       <div ref={containerRef} className="graph-canvas" />
+
+      {/* Toggle button for return edges */}
+      {!attackMode && (
+        <button
+          onClick={() => setShowReturnEdges(!showReturnEdges)}
+          className="graph-toggle-button"
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            padding: '8px 16px',
+            background: showReturnEdges ? '#4A90D9' : 'rgba(255, 255, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '6px',
+            color: '#F5F5F5',
+            fontSize: '12px',
+            fontWeight: 500,
+            fontFamily: "'Poppins', sans-serif",
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = showReturnEdges ? '#5AA0E9' : 'rgba(255, 255, 255, 0.15)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = showReturnEdges ? '#4A90D9' : 'rgba(255, 255, 255, 0.1)'
+          }}
+        >
+          {showReturnEdges ? '✓ ' : ''}Show Data Flow
+        </button>
+      )}
+
       <div className="graph-legend">
         <div className="graph-legend-item">
           <span className="graph-legend-dot" style={{ background: '#4A90D9' }} />
@@ -390,10 +693,18 @@ export default function GraphCanvas({
           <span className="graph-legend-dot" style={{ background: '#22C55E' }} />
           Tool
         </div>
+        <div className="graph-legend-item">
+          <span className="graph-legend-dot" style={{ background: '#F97316', clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' }} />
+          Trigger
+        </div>
         <div className="graph-legend-divider" />
         <div className="graph-legend-item">
           <span className="graph-legend-line graph-legend-line-solid" />
           delegates
+        </div>
+        <div className="graph-legend-item">
+          <span className="graph-legend-line graph-legend-line-dashed" style={{ opacity: 0.5 }} />
+          returns
         </div>
         <div className="graph-legend-item">
           <span className="graph-legend-line graph-legend-line-dashed" />
