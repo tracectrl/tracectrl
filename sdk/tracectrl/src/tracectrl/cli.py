@@ -246,7 +246,7 @@ def cmd_install_plugin(args: argparse.Namespace) -> None:
         else:
             console.print(f"  [yellow]No openclaw.json found at {config_file}[/yellow]")
 
-    console.print(f"\n  [bold green]TraceCtrl plugin installed successfully![/bold green]")
+    console.print("\n  [bold green]TraceCtrl plugin installed successfully![/bold green]")
     if not configure:
         console.print("  Run with --configure to auto-update openclaw.json")
     console.print("  Restart OpenClaw to activate the plugin.\n")
@@ -324,7 +324,7 @@ def _upload_scan_results(engine_url: str, scan_path: str, profile: str, checks: 
             print(f"  Scan uploaded to engine at {engine_url} (scan_id: {scan_id})")
     except Exception as e:
         print(f"  [warn] Could not upload scan to {url}: {e}")
-        print(f"         Use --json to export results manually.")
+        print("         Use --json to export results manually.")
 
 
 def cmd_scan(args: argparse.Namespace) -> None:
