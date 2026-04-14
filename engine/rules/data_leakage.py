@@ -7,8 +7,7 @@ Now includes multi-hop exfiltration path detection: sensitive data
 flowing from one agent to another agent with exfiltration capability.
 """
 
-import json
-from engine.rules.base import BaseRule, RuleResult, AttackStep
+from engine.rules.base import BaseRule, RuleResult
 
 EXFIL_CATEGORIES = {"external_api", "email"}
 SENSITIVE_DATA_CATEGORIES = {"memory_read", "database", "internal_api"}
@@ -36,11 +35,11 @@ class DataLeakageRule(BaseRule):
             vulnerable_agents.update(r.agents_involved)
 
         results = []
-        graph = self.build_bidirectional_graph(agent_edges)
+        self.build_bidirectional_graph(agent_edges)
 
         # Find agents with exfiltration capability (excluding trusted internal tools)
         filtered_tool_edges = [e for e in tool_edges if e["tool_name"] not in TRUSTED_INTERNAL_TOOLS]
-        exfil_agents = self.find_agents_with_tools(agents, filtered_tool_edges, categories=EXFIL_CATEGORIES)
+        self.find_agents_with_tools(agents, filtered_tool_edges, categories=EXFIL_CATEGORIES)
 
         # Find agents handling sensitive data
         sensitive_agents = set()

@@ -104,7 +104,7 @@ def update_agent_inventory(spans: list[dict]):
                 agent["first_seen"], agent["last_seen"], now,
             )],
         )
-    logger.info(f"update_agent_inventory: Complete")
+    logger.info("update_agent_inventory: Complete")
 
 
 def get_all_agents(service: str | None = None) -> list[dict]:

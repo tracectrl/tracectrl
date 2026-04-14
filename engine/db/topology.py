@@ -456,7 +456,7 @@ def _get_ingress_triggers(service: str | None = None) -> list[dict]:
             else:
                 logger.info(f"[_get_ingress_triggers] ✗ Skipping 'external' trigger for {first_agent_id}")
         else:
-            logger.info(f"[_get_ingress_triggers] ✗ Skipping - no agent_id found")
+            logger.info("[_get_ingress_triggers] ✗ Skipping - no agent_id found")
 
     # Deduplicate by (trigger_type, target_agent_id)
     seen = set()

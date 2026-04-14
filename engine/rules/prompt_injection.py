@@ -8,7 +8,7 @@ through agent chains to reach high-risk tools.
 """
 
 import json
-from engine.rules.base import BaseRule, RuleResult, AttackStep
+from engine.rules.base import BaseRule
 
 
 class PromptInjectionRule(BaseRule):
@@ -54,7 +54,7 @@ class PromptInjectionRule(BaseRule):
 
         # Find high-risk tool categories
         HIGH_RISK_CATEGORIES = {'code_execution', 'email', 'file_system', 'payment', 'external_api'}
-        high_risk_agents = self.find_agents_with_tools(agents, tool_edges, categories=HIGH_RISK_CATEGORIES)
+        self.find_agents_with_tools(agents, tool_edges, categories=HIGH_RISK_CATEGORIES)
 
         # Step 3: Build attack paths for each vulnerable agent
         for vuln_agent_id, vuln_info in vulnerable_agents.items():

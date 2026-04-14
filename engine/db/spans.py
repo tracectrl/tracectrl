@@ -5,7 +5,6 @@ fixed schema: Timestamp, TraceId, SpanId, SpanAttributes (Map), etc.
 We extract tracectrl.* attributes from the SpanAttributes map.
 """
 
-from datetime import datetime
 from engine.db.client import execute
 
 

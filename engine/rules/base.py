@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from collections import defaultdict
-from typing import Set, List, Dict
+from typing import Set, List
 
 
 @dataclass
