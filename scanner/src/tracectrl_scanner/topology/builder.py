@@ -8,11 +8,11 @@ edges between them.
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
 from .models import Edge, EdgeType, Node, NodeType, TopologyGraph
-
 
 # Channels that accept messages from the public internet.
 _INTERNET_CHANNELS = {"whatsapp", "telegram", "discord", "slack", "web", "api"}
@@ -25,6 +25,61 @@ _LLM_PLUGIN_NAMES = {
 
 # Keys whose presence (with a truthy value) signals a channel is configured.
 _CHANNEL_CONFIG_SIGNALS = {"token", "bot_token", "api_key", "webhook_url", "app_id"}
+
+# Skills with known data-write / sensitive-read capabilities.
+_HIGH_RISK_SKILLS = {
+    "notion": "read/write Notion pages and databases",
+    "github": "read/write GitHub repositories and issues",
+    "gitlab": "read/write GitLab repositories",
+    "gmail": "send email and read inbox",
+    "google-mail": "send email and read inbox",
+    "google-docs": "read/write Google Docs",
+    "google-drive": "read/write Google Drive files",
+    "gdrive": "read/write Google Drive files",
+    "google-sheets": "read/write Google Sheets",
+    "sheets": "read/write Google Sheets",
+    "jira": "read/write Jira issues",
+    "confluence": "read/write Confluence pages",
+    "salesforce": "access CRM customer data",
+    "hubspot": "access CRM customer data",
+    "slack": "post messages to Slack",
+    "linear": "read/write Linear issues",
+    "airtable": "read/write Airtable bases",
+    "postgres": "direct database access",
+    "mysql": "direct database access",
+    "mongodb": "direct database access",
+    "database": "direct database access",
+    "file": "read/write local filesystem",
+    "filesystem": "read/write local filesystem",
+    "code-interpreter": "execute arbitrary code",
+    "python": "execute Python code",
+    "jupyter": "execute Jupyter notebooks",
+    "aws": "AWS cloud API access",
+    "azure": "Azure cloud API access",
+    "gcp": "Google Cloud Platform access",
+    "sendgrid": "send bulk email",
+    "mailchimp": "send bulk email",
+    "twilio": "send SMS messages",
+    "stripe": "payment and billing access",
+}
+
+_CRED_KEY_NAMES = {"apikey", "api_key", "token", "secret", "password", "key"}
+
+
+def _mask_token(value: str) -> str:
+    """Return a masked version of a secret: show last 4 chars only."""
+    if not value or len(value) < 5:
+        return "••••"
+    return "••••" + value[-4:]
+
+
+def _key_status(value: Any) -> str:
+    """Classify a credential value as 'env_var', 'plaintext', or 'none'."""
+    if not value or not isinstance(value, str):
+        return "none"
+    if re.match(r"^\$\{.+\}$", value):
+        return "env_var"
+    return "plaintext"
 
 
 def _edge_id(source: str, target: str, edge_type: str) -> str:
@@ -73,13 +128,21 @@ def build(
     for ch_name, ch_cfg in channels.items():
         if _is_channel_enabled(ch_cfg):
             node_id = f"ingress:{ch_name}"
+            raw_token = (
+                ch_cfg.get("botToken") or ch_cfg.get("token")
+                or ch_cfg.get("apiKey") or ""
+            ) if isinstance(ch_cfg, dict) else ""
+            props: dict[str, Any] = {
+                "channel": ch_name,
+                "dm_policy": ch_cfg.get("dmPolicy", "") if isinstance(ch_cfg, dict) else "",
+                "allow_from": ch_cfg.get("allowFrom", []) if isinstance(ch_cfg, dict) else [],
+                "group_policy": ch_cfg.get("groupPolicy", "") if isinstance(ch_cfg, dict) else "",
+                "streaming": ch_cfg.get("streaming", "") if isinstance(ch_cfg, dict) else "",
+                "has_token": bool(raw_token),
+                "token_tail": _mask_token(raw_token) if raw_token else "",
+            }
             graph.nodes.append(
-                Node(
-                    id=node_id,
-                    type=NodeType.INGRESS,
-                    label=ch_name.title(),
-                    properties={"channel": ch_name},
-                )
+                Node(id=node_id, type=NodeType.INGRESS, label=ch_name.title(), properties=props)
             )
             ingress_ids.append(node_id)
 
@@ -99,13 +162,40 @@ def build(
         elif agents_cfg.get("defaults"):
             resolved_agent_ids.append("default")
 
+    defaults_cfg: dict[str, Any] = agents_cfg.get("defaults", {})
+    heartbeat_cfg = defaults_cfg.get("heartbeat", {})
+    heartbeat_str = ""
+    if isinstance(heartbeat_cfg, dict) and heartbeat_cfg.get("every"):
+        heartbeat_str = f"every {heartbeat_cfg['every']}"
+        if heartbeat_cfg.get("target"):
+            heartbeat_str += f" via {heartbeat_cfg['target']}"
+
     for aid in resolved_agent_ids:
+        # Read soul.md excerpt if available
+        soul_excerpt = ""
+        try:
+            soul_path = openclaw_root / "agents" / aid / "agent" / "SOUL.md"
+            if soul_path.exists():
+                soul_excerpt = soul_path.read_text(encoding="utf-8")[:500].strip()
+        except Exception:
+            pass
+
+        agent_props: dict[str, Any] = {
+            "primary_model": (
+                defaults_cfg.get("model", {}).get("primary", "")
+                if isinstance(defaults_cfg.get("model"), dict) else ""
+            ),
+            "workspace": defaults_cfg.get("workspace", ""),
+            "max_concurrent": defaults_cfg.get("maxConcurrent", ""),
+            "compaction_mode": (
+                defaults_cfg.get("compaction", {}).get("mode", "")
+                if isinstance(defaults_cfg.get("compaction"), dict) else ""
+            ),
+            "heartbeat": heartbeat_str,
+            "soul_excerpt": soul_excerpt,
+        }
         graph.nodes.append(
-            Node(
-                id=f"agent:{aid}",
-                type=NodeType.AGENT,
-                label=aid,
-            )
+            Node(id=f"agent:{aid}", type=NodeType.AGENT, label=aid, properties=agent_props)
         )
 
     # -- 3. Ingress → Agent edges (routes_to) --------------------------- #
@@ -126,15 +216,45 @@ def build(
     provider_ids: list[str] = []
     models_cfg: dict[str, Any] = config.get("models", {})
     providers: dict[str, Any] = models_cfg.get("providers", {})
-    for prov_name in providers:
+
+    # Models live in agents.defaults.models, keyed as "<provider>/<model-id>"
+    agent_models: dict[str, Any] = defaults_cfg.get("models", {})
+    primary_model: str = (
+        defaults_cfg.get("model", {}).get("primary", "")
+        if isinstance(defaults_cfg.get("model"), dict) else ""
+    )
+
+    for prov_name, prov_cfg in providers.items():
         node_id = f"llm:{prov_name}"
+        prov_dict = prov_cfg if isinstance(prov_cfg, dict) else {}
+        raw_key = prov_dict.get("apiKey", "")
+
+        # Collect models from agents.defaults.models that belong to this provider
+        prefix = f"{prov_name}/"
+        agent_model_list = [k for k in agent_models if k.startswith(prefix)]
+        # Also fall back to the provider's own models list/dict if populated
+        prov_models_raw = prov_dict.get("models", [])
+        if isinstance(prov_models_raw, dict):
+            prov_model_list = list(prov_models_raw.keys())
+        elif isinstance(prov_models_raw, list):
+            prov_model_list = [str(m) for m in prov_models_raw if m]
+        else:
+            prov_model_list = []
+        # Merge, deduplicate, preserve order
+        all_models = list(dict.fromkeys(agent_model_list + prov_model_list))
+
+        # Which one is the active primary?
+        active_model = primary_model if primary_model.startswith(prefix) else ""
+
+        llm_props: dict[str, Any] = {
+            "base_url": prov_dict.get("baseUrl", ""),
+            "api_key_status": _key_status(raw_key),
+            "api_key_tail": _mask_token(raw_key) if raw_key and _key_status(raw_key) == "plaintext" else "",
+            "models": all_models,
+            "primary_model": active_model,
+        }
         graph.nodes.append(
-            Node(
-                id=node_id,
-                type=NodeType.LLM_PROVIDER,
-                label=prov_name,
-                properties=providers[prov_name] if isinstance(providers[prov_name], dict) else {},
-            )
+            Node(id=node_id, type=NodeType.LLM_PROVIDER, label=prov_name, properties=llm_props)
         )
         provider_ids.append(node_id)
 
@@ -156,14 +276,24 @@ def build(
     tool_ids: list[str] = []
     seen_tools: set[str] = set()
 
+    web_cfg: dict[str, Any] = config.get("tools", {}).get("web", {})
+
     def _collect_tools(tools_list: list[Any]) -> None:
         for t in tools_list:
             name = t if isinstance(t, str) else (t.get("name") if isinstance(t, dict) else str(t))
             if name and name not in seen_tools:
                 seen_tools.add(name)
                 node_id = f"tool:{name}"
+                tool_props: dict[str, Any] = {
+                    "dangerous": name in ("bash", "shell", "exec"),
+                    "wildcard": name == "*",
+                }
+                if name == "web_fetch":
+                    tool_props["allowed_domains"] = (
+                        web_cfg.get("fetch", {}).get("allowedDomains", [])
+                    )
                 graph.nodes.append(
-                    Node(id=node_id, type=NodeType.TOOL, label=name)
+                    Node(id=node_id, type=NodeType.TOOL, label=name, properties=tool_props)
                 )
                 tool_ids.append(node_id)
 
@@ -197,12 +327,47 @@ def build(
                 )
             )
 
-    # -- 8. Scheduler node ----------------------------------------------- #
+    # -- 8. Scheduler nodes (cron + heartbeat) ----------------------------- #
     cron_cfg: dict[str, Any] = config.get("cron", {})
     if cron_cfg.get("enabled") is True:
+        # Read individual jobs from <root>/cron/jobs.json
+        cron_jobs: list[dict[str, Any]] = []
+        jobs_file = openclaw_root / "cron" / "jobs.json"
+        if jobs_file.exists():
+            import json as _json
+            try:
+                jobs_data = _json.loads(jobs_file.read_text())
+                cron_jobs = [j for j in jobs_data.get("jobs", []) if isinstance(j, dict)]
+            except Exception:
+                cron_jobs = []
+
         sched_id = "scheduler:cron"
+        # Summarise jobs into a list stored on the single node
+        jobs_summary = [
+            {
+                "id": j.get("id", ""),
+                "name": j.get("name", j.get("id", "")),
+                "expr": j.get("schedule", {}).get("expr", ""),
+                "timezone": j.get("timezone", ""),
+                "enabled": j.get("enabled", True),
+                "action_type": j.get("action", {}).get("type", ""),
+                "description": j.get("description", ""),
+                "session_target": j.get("sessionTarget", ""),
+            }
+            for j in cron_jobs
+        ]
         graph.nodes.append(
-            Node(id=sched_id, type=NodeType.SCHEDULER, label="Cron Scheduler")
+            Node(
+                id=sched_id,
+                type=NodeType.SCHEDULER,
+                label="Cron Scheduler",
+                properties={
+                    "enabled": True,
+                    "type": "cron",
+                    "job_count": len(jobs_summary),
+                    "jobs": jobs_summary,
+                },
+            )
         )
         for aid in resolved_agent_ids:
             etype = EdgeType.TRIGGERS
@@ -211,6 +376,40 @@ def build(
                 Edge(
                     id=_edge_id(sched_id, target, etype.value),
                     source=sched_id,
+                    target=target,
+                    type=etype,
+                )
+            )
+
+    # Heartbeat is a scheduler even when cron is disabled
+    heartbeat_cfg: dict[str, Any] = (
+        config.get("agents", {}).get("defaults", {}).get("heartbeat", {})
+    )
+    if isinstance(heartbeat_cfg, dict) and heartbeat_cfg.get("every"):
+        hb_id = "scheduler:heartbeat"
+        hb_target = heartbeat_cfg.get("target", "")
+        hb_to = heartbeat_cfg.get("to", "")
+        graph.nodes.append(
+            Node(
+                id=hb_id,
+                type=NodeType.SCHEDULER,
+                label="Heartbeat",
+                properties={
+                    "enabled": True,
+                    "type": "heartbeat",
+                    "interval": heartbeat_cfg.get("every", ""),
+                    "target": hb_target,
+                    "to": str(hb_to) if hb_to else "",
+                },
+            )
+        )
+        for aid in resolved_agent_ids:
+            etype = EdgeType.TRIGGERS
+            target = f"agent:{aid}"
+            graph.edges.append(
+                Edge(
+                    id=_edge_id(hb_id, target, etype.value),
+                    source=hb_id,
                     target=target,
                     type=etype,
                 )
@@ -282,10 +481,36 @@ def build(
                         Edge(id=_edge_id(source, llm_id, etype.value), source=source, target=llm_id, type=etype)
                     )
         else:
+            # If a same-named ingress node already exists (e.g. telegram is both a
+            # channel and a plugin), reuse the ingress node rather than creating a
+            # duplicate extension node. Still wire agent → ingress (hooks_into) so
+            # the bidirectional relationship is visible in the graph.
+            ingress_id = f"ingress:{ext_name}"
+            if ingress_id in existing_node_ids:
+                for aid in resolved_agent_ids:
+                    etype = EdgeType.HOOKS_INTO
+                    source = f"agent:{aid}"
+                    graph.edges.append(
+                        Edge(
+                            id=_edge_id(source, ingress_id, etype.value),
+                            source=source,
+                            target=ingress_id,
+                            type=etype,
+                        )
+                    )
+                continue
+
             ext_id = f"extension:{ext_name}"
             if ext_id not in existing_node_ids:
+                ext_entry = raw_entries.get(ext_name, {}) if isinstance(raw_entries, dict) else {}
+                ext_enabled = ext_entry.get("enabled", True) if isinstance(ext_entry, dict) else True
                 graph.nodes.append(
-                    Node(id=ext_id, type=NodeType.EXTENSION, label=ext_name)
+                    Node(
+                        id=ext_id,
+                        type=NodeType.EXTENSION,
+                        label=ext_name,
+                        properties={"enabled": ext_enabled},
+                    )
                 )
                 existing_node_ids.add(ext_id)
                 extension_ids.append(ext_id)
@@ -298,5 +523,50 @@ def build(
             graph.edges.append(
                 Edge(id=_edge_id(source, ext_id, etype.value), source=source, target=ext_id, type=etype)
             )
+
+    # -- 12. Skill nodes from skills.entries -------------------------------- #
+    skills_cfg: dict[str, Any] = config.get("skills", {})
+    skill_entries: dict[str, Any] = skills_cfg.get("entries", {})
+    skill_ids: list[str] = []
+
+    if isinstance(skill_entries, dict):
+        existing_node_ids = {n.id for n in graph.nodes}
+        for skill_name, skill_cfg in skill_entries.items():
+            skill_id = f"skill:{skill_name}"
+            if skill_id in existing_node_ids:
+                continue
+            skill_props: dict[str, Any] = {}
+            if isinstance(skill_cfg, dict):
+                cred_value = ""
+                cred_key = ""
+                for k, v in skill_cfg.items():
+                    if k.lower() in _CRED_KEY_NAMES and isinstance(v, str):
+                        cred_value = v
+                        cred_key = k
+                        break
+                skill_props["has_credential"] = bool(cred_value)
+                skill_props["credential_status"] = _key_status(cred_value) if cred_value else "none"
+                skill_props["credential_key"] = cred_key
+                skill_props["credential_tail"] = _mask_token(cred_value) if cred_value and _key_status(cred_value) == "plaintext" else ""
+            skill_props["risk_level"] = "high" if skill_name.lower() in _HIGH_RISK_SKILLS else "unknown"
+            skill_props["capability"] = _HIGH_RISK_SKILLS.get(skill_name.lower(), "")
+            graph.nodes.append(
+                Node(id=skill_id, type=NodeType.SKILL, label=skill_name, properties=skill_props)
+            )
+            existing_node_ids.add(skill_id)
+            skill_ids.append(skill_id)
+
+        for aid in resolved_agent_ids:
+            for skill_id in skill_ids:
+                etype = EdgeType.INVOKES
+                source = f"agent:{aid}"
+                graph.edges.append(
+                    Edge(
+                        id=_edge_id(source, skill_id, etype.value),
+                        source=source,
+                        target=skill_id,
+                        type=etype,
+                    )
+                )
 
     return graph

@@ -1,6 +1,7 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { fetchLatestScan, ScanResult, ScanTopology } from '../api/scan'
-import ScanTopologyCanvas from '../components/ScanTopologyCanvas'
+import ScanTopologyCanvas, { SelectedNode } from '../components/ScanTopologyCanvas'
+import ScanNodePanel from '../components/ScanNodePanel'
 
 const SEVERITY_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, pass: 0 }
 
@@ -16,6 +17,8 @@ const CATEGORY_MAP: Record<string, string> = {
   'LLM Providers': 'Security',
   'Logging': 'Security',
   'Security': 'Security',
+  'Skills': 'Security',
+  'Persistence': 'Security',
   'Operational': 'Operational',
   'Performance': 'Performance',
   'Compliance': 'Compliance',
@@ -24,15 +27,29 @@ const CATEGORY_MAP: Record<string, string> = {
 const CATEGORY_ORDER = ['Security', 'Operational', 'Performance', 'Compliance']
 
 const SECTION_PREFIX_MAP: Record<string, string[]> = {
-  'Ingress': ['ingress:'],
-  'Tools': ['tool:'],
-  'LLM Providers': ['llm:'],
+  'Ingress':          ['ingress:'],
+  'Tools':            ['tool:'],
+  'LLM Providers':    ['llm:'],
   'Lateral Movement': ['subagent_surface:'],
-  'Persistence': ['scheduler:'],
-  'Plugins': ['extension:'],
+  'Persistence':      ['scheduler:'],
+  'Plugins':          ['extension:'],
+  'Skills':           ['skill:'],
 }
 const AGENT_SECTIONS = new Set(['Network', 'Guardrails', 'Credentials', 'Filesystem', 'Logging'])
 const SEV_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1 }
+
+function findNodeForResult(result: ScanResult, topology: ScanTopology | null): SelectedNode | null {
+  if (!topology) return null
+  const prefixes = SECTION_PREFIX_MAP[result.section]
+  let node = prefixes
+    ? topology.nodes.find(n => prefixes.some(p => n.id.startsWith(p))) ?? null
+    : null
+  if (!node && AGENT_SECTIONS.has(result.section)) {
+    node = topology.nodes.find(n => n.type === 'AGENT') ?? null
+  }
+  if (!node) return null
+  return { id: node.id, label: node.label, nodeType: node.type, properties: node.properties }
+}
 
 function severityBadgeClass(severity: string): string {
   const s = severity.toLowerCase()
@@ -60,6 +77,8 @@ export default function ScanReport() {
   const [topology, setTopology] = useState<ScanTopology | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [showPassed, setShowPassed] = useState<Record<string, boolean>>({})
+  const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null)
+  const topologyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { document.title = 'Scan Report \u2014 TraceCtrl' }, [])
 
@@ -261,12 +280,17 @@ export default function ScanReport() {
 
           {/* Topology visualization */}
           {topology && topology.nodes.length > 0 && (
-            <div className="scan-topology-panel">
+            <div className="scan-topology-panel" ref={topologyRef}>
               <div className="scan-topology-header">
                 <span>Architecture Risk View</span>
                 <span>{topology.nodes.length} nodes · {topology.edges.length} edges</span>
               </div>
-              <ScanTopologyCanvas topology={topology} nodeRiskMap={nodeRiskMap} />
+              <ScanTopologyCanvas
+                topology={topology}
+                nodeRiskMap={nodeRiskMap}
+                onNodeClick={(n) => setSelectedNode(n ?? null)}
+                selectedNodeId={selectedNode?.id ?? null}
+              />
             </div>
           )}
 
@@ -300,17 +324,32 @@ export default function ScanReport() {
                     <div className="scan-category-findings">
                       {group.failedResults.map(r => {
                         const isRowExpanded = expandedRow === r.check_id
+                        const linkedNode = findNodeForResult(r, topology)
                         return (
                           <div key={r.check_id}>
                             <div
                               className="scan-finding-row"
-                              onClick={() => setExpandedRow(isRowExpanded ? null : r.check_id)}
+                              onClick={() => {
+                                setExpandedRow(isRowExpanded ? null : r.check_id)
+                                if (linkedNode) {
+                                  setSelectedNode(linkedNode)
+                                  topologyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                                }
+                              }}
                             >
                               <span className={`badge ${severityBadgeClass(r.severity)}`}>
                                 {r.severity.toUpperCase()}
                               </span>
                               <span className="scan-finding-id">{r.check_id}</span>
                               <span className="scan-finding-title">{r.title}</span>
+                              {linkedNode && (
+                                <span
+                                  title={`View ${linkedNode.label} in graph`}
+                                  style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--gray-600)', flexShrink: 0 }}
+                                >
+                                  ⬡
+                                </span>
+                              )}
                             </div>
                             {isRowExpanded && (
                               <div className="scan-finding-detail">
@@ -338,15 +377,30 @@ export default function ScanReport() {
                           </button>
                           {showPassed[group.name] && group.passedResults.map(r => {
                             const isRowExpanded = expandedRow === r.check_id
+                            const linkedNode = findNodeForResult(r, topology)
                             return (
                               <div key={r.check_id}>
                                 <div
                                   className="scan-finding-row"
-                                  onClick={() => setExpandedRow(isRowExpanded ? null : r.check_id)}
+                                  onClick={() => {
+                                    setExpandedRow(isRowExpanded ? null : r.check_id)
+                                    if (linkedNode) {
+                                      setSelectedNode(linkedNode)
+                                      topologyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                                    }
+                                  }}
                                 >
                                   <span className="badge badge-low">PASS</span>
                                   <span className="scan-finding-id">{r.check_id}</span>
                                   <span className="scan-finding-title">{r.title}</span>
+                                  {linkedNode && (
+                                    <span
+                                      title={`View ${linkedNode.label} in graph`}
+                                      style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--gray-600)', flexShrink: 0 }}
+                                    >
+                                      ⬡
+                                    </span>
+                                  )}
                                 </div>
                                 {isRowExpanded && (
                                   <div className="scan-finding-detail">
@@ -371,6 +425,7 @@ export default function ScanReport() {
           </div>
         </>
       )}
+      <ScanNodePanel node={selectedNode} onClose={() => setSelectedNode(null)} />
     </div>
   )
 }

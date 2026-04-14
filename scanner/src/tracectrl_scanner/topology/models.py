@@ -13,6 +13,7 @@ class NodeType(str, Enum):
     SCHEDULER = "SCHEDULER"
     EXTERNAL_SERVICE = "EXTERNAL_SERVICE"
     SUBAGENT_SURFACE = "SUBAGENT_SURFACE"
+    SKILL = "SKILL"
 
 
 class EdgeType(str, Enum):

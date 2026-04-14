@@ -4,12 +4,12 @@ from .models import CheckResult
 from .checks import (network, credentials, tools, ingress, guardrails,
                      filesystem, persistence, lateral_movement, plugins,
                      llm_providers, logging_checks, security_advanced,
-                     operational, performance, compliance)
+                     operational, performance, compliance, skills)
 
 ALL_CHECK_MODULES = [network, credentials, tools, ingress, guardrails,
                      filesystem, persistence, lateral_movement, plugins,
                      llm_providers, logging_checks, security_advanced,
-                     operational, performance, compliance]
+                     operational, performance, compliance, skills]
 
 def run_all(config: dict[str, Any], openclaw_root: Path) -> list[CheckResult]:
     results = []
