@@ -29,7 +29,6 @@ function buildElements(
   data: TopologyGraph,
   phaseGroups: PhaseGroup[] | undefined,
   showPhases: boolean,
-  showReturnEdges: boolean,
 ): cytoscape.ElementDefinition[] {
   const elements: cytoscape.ElementDefinition[] = []
 
@@ -146,8 +145,8 @@ export default function GraphCanvas({
       cyRef.current = null
     }
 
-    // Always build with return edges, we'll control visibility with styles
-    const elements = buildElements(data, phaseGroups, !!showPhases, true)
+    // Build topology elements
+    const elements = buildElements(data, phaseGroups, !!showPhases)
 
     cyRef.current = cytoscape({
       container: containerRef.current,

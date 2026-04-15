@@ -31,8 +31,6 @@ export default function AttackFindingsPanel({ paths, selectedPath, onPathSelect,
   const generateMitigations = (path: AttackPath): MitigationSuggestion[] => {
     const suggestions: MitigationSuggestion[] = []
     const pathNodes = path.path_nodes || []
-    const pathSteps = path.path_steps || []
-    const agentsInvolved = path.agents_involved || []
 
     // Check if path starts with ingress (external input)
     const hasExternalIngress = pathNodes.some(node => node.startsWith('ingress:'))
@@ -47,18 +45,16 @@ export default function AttackFindingsPanel({ paths, selectedPath, onPathSelect,
       })
     }
 
-    // Check for financial/payment operations
-    const hasFinancialOps = pathSteps.some(step =>
-      step.vulnerability?.includes('financial') ||
-      step.node_id?.includes('payment') ||
-      step.node_id?.includes('billing')
+    // Check for financial/payment operations based on node names
+    const hasFinancialOps = pathNodes.some(node =>
+      node.includes('payment') || node.includes('billing') || node.includes('financial')
     )
     if (hasFinancialOps) {
       suggestions.push({
         type: 'human_review',
         priority: 'high',
         suggestion: 'Require human-in-the-loop approval for all financial operations above a threshold',
-        target: pathSteps.find(s => s.node_id?.includes('payment') || s.node_id?.includes('billing'))?.node_id,
+        target: pathNodes.find(node => node.includes('payment') || node.includes('billing')),
       })
     }
 
@@ -90,12 +86,13 @@ export default function AttackFindingsPanel({ paths, selectedPath, onPathSelect,
       })
     }
 
-    // Long attack chains (> 3 agents)
-    if (agentsInvolved.length > 3) {
+    // Long attack chains (> 3 nodes)
+    const agentNodes = pathNodes.filter(n => !n.startsWith('tool:') && !n.startsWith('ingress:'))
+    if (agentNodes.length > 3) {
       suggestions.push({
         type: 'architecture',
         priority: 'medium',
-        suggestion: `Reduce agent chain complexity (currently ${agentsInvolved.length} agents). Consolidate agents or add validation checkpoints between hops`,
+        suggestion: `Reduce agent chain complexity (currently ${agentNodes.length} agents). Consolidate agents or add validation checkpoints between hops`,
       })
     }
 
@@ -112,7 +109,7 @@ export default function AttackFindingsPanel({ paths, selectedPath, onPathSelect,
     }
 
     // Add guardrails for prompt injection
-    const firstAgent = agentsInvolved[0]
+    const firstAgent = agentNodes[0]
     if (firstAgent && hasExternalIngress) {
       suggestions.push({
         type: 'guardrail',
