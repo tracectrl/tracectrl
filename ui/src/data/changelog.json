@@ -1,0 +1,32 @@
+[
+  {
+    "version": "0.2.0",
+    "date": "2026-04-15",
+    "title": "Web Setup Flow",
+    "items": [
+      "Full scan setup flow in the web UI — no terminal needed",
+      "One-click fix for 6 auto-fixable security checks",
+      "Config drift detection — alerts when openclaw.json changes since last scan"
+    ]
+  },
+  {
+    "version": "0.1.5",
+    "date": "2026-03-28",
+    "title": "Risk & Attack Paths",
+    "items": [
+      "Attack path visualisation with exploitability scoring",
+      "Risk dashboard with per-agent scoring",
+      "Session anomaly surfacing (P95 slow badge, error badge)"
+    ]
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-03-10",
+    "title": "Initial Release",
+    "items": [
+      "OpenClaw static security scanner (38 checks, 6 auto-fixable)",
+      "OpenTelemetry runtime trace ingestion",
+      "Topology graph, sessions viewer, agents inventory"
+    ]
+  }
+]

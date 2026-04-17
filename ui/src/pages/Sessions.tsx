@@ -93,6 +93,13 @@ export default function Sessions() {
     return Math.max(...sessions.map(s => s.total_duration_ns))
   }, [sessions])
 
+  const p95Duration = useMemo(() => {
+    if (sessions.length < 4) return Infinity
+    const sorted = [...sessions].map(s => s.total_duration_ns).sort((a, b) => a - b)
+    const idx = Math.floor(sorted.length * 0.95)
+    return sorted[Math.min(idx, sorted.length - 1)]
+  }, [sessions])
+
   return (
     <div>
       <div className="page-header">
@@ -185,11 +192,16 @@ export default function Sessions() {
                           </div>
                         </td>
                         <td>
-                          {session.has_error ? (
-                            <span className="badge badge-critical">ERROR</span>
-                          ) : (
-                            <span className="badge badge-low">OK</span>
-                          )}
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {session.has_error ? (
+                              <span className="badge badge-critical">ERROR</span>
+                            ) : (
+                              <span className="badge badge-low">OK</span>
+                            )}
+                            {!session.has_error && session.total_duration_ns >= p95Duration && (
+                              <span className="badge badge-medium" title="Duration in top 5% of all sessions">SLOW</span>
+                            )}
+                          </div>
                         </td>
                         <td className="text-muted">{formatTime(session.start_time)}</td>
                       </tr>

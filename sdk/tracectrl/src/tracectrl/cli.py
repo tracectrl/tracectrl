@@ -400,6 +400,17 @@ def cmd_scan(args: argparse.Namespace) -> None:
             print("  [info] No reachable TraceCtrl engine found — skipping upload.")
             print("         Results are shown below. Use --json to export.")
 
+    # --- Engine-internal JSON output (full topology, used by scan trigger subprocess) ---
+    if getattr(args, 'engine_json', False):
+        payload = {
+            "scan_path": str(root),
+            "profile": profile,
+            "checks": checks_dicts,
+            "topology": topology_dict,
+        }
+        print(json.dumps(payload, default=str))
+        sys.exit(1 if has_critical else 0)
+
     # --- JSON output -----------------------------------------------------------
     if args.json:
         payload = {
@@ -726,6 +737,7 @@ def main() -> None:
         default=False,
         help="Skip uploading results to the engine",
     )
+    scan_parser.add_argument("--engine-json", action="store_true", help=argparse.SUPPRESS)
 
     # --- fix -------------------------------------------------------------------
     fix_parser = subparsers.add_parser(

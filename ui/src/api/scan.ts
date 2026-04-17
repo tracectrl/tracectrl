@@ -50,6 +50,39 @@ export interface ScanDetail {
   scan_id: string | null
   results: ScanResult[]
   topology: ScanTopology | null
+  config_changed?: boolean
+  config_hash_at_scan?: string
+  config_hash_current?: string
+  days_since_scan?: number
+  openclaw_path?: string
+}
+
+export interface PathValidationResponse {
+  valid: boolean
+  openclaw_json_found: boolean
+  path: string
+  error?: string
+}
+
+export interface ScanTriggerResponse {
+  scan_id: string
+  status: string
+  started_at: string
+}
+
+export interface ScanStatusResponse {
+  scan_id: string
+  status: 'running' | 'complete' | 'failed'
+  started_at: string
+  completed_at?: string
+  error?: string
+  stored_scan_id?: string
+}
+
+export interface FixResponse {
+  applied: string[]
+  skipped: string[]
+  errors: Record<string, string>
 }
 
 export async function fetchScans(): Promise<ScanSummary[]> {
@@ -67,5 +100,41 @@ export async function fetchLatestScan(): Promise<ScanDetail> {
 export async function fetchScanDetail(scanId: string): Promise<ScanDetail> {
   const res = await fetch(`${ENGINE_URL}/api/v1/scans/${scanId}`)
   if (!res.ok) throw new Error(`Failed to fetch scan: ${res.statusText}`)
+  return res.json()
+}
+
+export async function validateWorkspacePath(path: string): Promise<PathValidationResponse> {
+  const res = await fetch(`${ENGINE_URL}/api/v1/scan/validate-path`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) throw new Error(`Failed to validate path: ${res.statusText}`)
+  return res.json()
+}
+
+export async function triggerScan(workspacePath: string, profile?: 'L1' | 'L2'): Promise<ScanTriggerResponse> {
+  const res = await fetch(`${ENGINE_URL}/api/v1/scan/trigger`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace_path: workspacePath, ...(profile ? { profile } : {}) }),
+  })
+  if (!res.ok) throw new Error(`Failed to trigger scan: ${res.statusText}`)
+  return res.json()
+}
+
+export async function pollScanStatus(scanId: string): Promise<ScanStatusResponse> {
+  const res = await fetch(`${ENGINE_URL}/api/v1/scan/status/${scanId}`)
+  if (!res.ok) throw new Error(`Failed to fetch scan status: ${res.statusText}`)
+  return res.json()
+}
+
+export async function applyFixes(workspacePath: string, checkIds: string[]): Promise<FixResponse> {
+  const res = await fetch(`${ENGINE_URL}/api/v1/scan/fix`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace_path: workspacePath, check_ids: checkIds }),
+  })
+  if (!res.ok) throw new Error(`Failed to apply fixes: ${res.statusText}`)
   return res.json()
 }

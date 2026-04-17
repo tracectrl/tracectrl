@@ -24,6 +24,7 @@ def store_scan_results(results: list[dict], openclaw_path: str, profile: str, to
         execute("INSERT INTO scan_results VALUES", rows)
     if topology:
         store_scan_topology(scan_id, topology)
+    store_scan_run(scan_id, openclaw_path, profile)
     return scan_id
 
 
@@ -73,6 +74,27 @@ def get_latest_scan() -> list[dict]:
     if not rows:
         return []
     return get_scan_results(rows[0][0])
+
+
+def store_scan_run(scan_id: str, workspace_path: str, profile: str, config_hash: str = "") -> None:
+    """Store a scan run record (one per scan, not per finding)."""
+    from datetime import timezone
+    execute(
+        "INSERT INTO scan_runs (scan_id, scanned_at, workspace_path, config_hash, profile) VALUES",
+        [(scan_id, datetime.now(timezone.utc), workspace_path, config_hash, profile)],
+    )
+
+
+def get_latest_scan_run() -> dict | None:
+    """Get metadata for the most recent scan run."""
+    rows = execute(
+        """SELECT scan_id, scanned_at, workspace_path, config_hash, profile
+           FROM scan_runs ORDER BY scanned_at DESC LIMIT 1"""
+    )
+    if not rows:
+        return None
+    cols = ["scan_id", "scanned_at", "workspace_path", "config_hash", "profile"]
+    return dict(zip(cols, rows[0]))
 
 
 def list_scans() -> list[dict]:
