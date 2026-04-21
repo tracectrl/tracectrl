@@ -2,7 +2,7 @@ import { ENGINE_URL } from './config'
 
 export interface TopologyNode {
   id: string
-  type: 'agent' | 'tool'
+  type: 'agent' | 'tool' | 'skill'
   label: string
   metadata: Record<string, unknown>
 }

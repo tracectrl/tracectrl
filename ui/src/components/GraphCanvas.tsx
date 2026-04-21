@@ -395,17 +395,27 @@ export default function GraphCanvas({
           },
         },
       ],
-      layout: {
-        name: 'dagre',
-        rankDir: 'TB',
-        nodeSep: 100,
-        rankSep: 70,
-        animate: false,
-        fit: true,
-        padding: 80,
-        ranker: 'tight-tree',
-        edgeSep: 20,
-      } as any,
+      layout: showPhases
+        ? {
+            name: 'dagre',
+            rankDir: 'TB',
+            nodeSep: 100,
+            rankSep: 70,
+            animate: false,
+            fit: true,
+            padding: 80,
+            ranker: 'tight-tree',
+            edgeSep: 20,
+          }
+        : {
+            name: 'dagre',
+            rankDir: 'LR',
+            nodeSep: 80,
+            rankSep: 150,
+            animate: false,
+            fit: true,
+            padding: 80,
+          } as any,
       minZoom: 0.3,
       maxZoom: 3,
     })

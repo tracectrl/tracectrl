@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ..discovery import list_skills
 from .models import Edge, EdgeType, Node, NodeType, TopologyGraph
 
 # Channels that accept messages from the public internet.
@@ -313,6 +314,33 @@ def build(
             per_agent_tools = entry.get("tools", {}).get("allow", [])
             _collect_tools(per_agent_tools)
 
+    # Detect tools from enabled flags (web.search, web.fetch, exec)
+    tools_cfg = config.get("tools", {})
+    if isinstance(tools_cfg, dict):
+        # Check web.search and web.fetch
+        web_tools = tools_cfg.get("web", {})
+        if isinstance(web_tools, dict):
+            if web_tools.get("search", {}).get("enabled"):
+                _collect_tools(["web_search"])
+            if web_tools.get("fetch", {}).get("enabled"):
+                _collect_tools(["web_fetch"])
+
+        # Check exec tool - add with security level property
+        exec_cfg = tools_cfg.get("exec", {})
+        if isinstance(exec_cfg, dict) and exec_cfg.get("security"):
+            exec_security = exec_cfg.get("security")
+            node_id = "tool:exec"
+            if node_id not in seen_tools:
+                seen_tools.add("exec")
+                tool_props: dict[str, Any] = {
+                    "dangerous": True,
+                    "security_level": exec_security,
+                }
+                graph.nodes.append(
+                    Node(id=node_id, type=NodeType.TOOL, label="exec", properties=tool_props)
+                )
+                tool_ids.append(node_id)
+
     # -- 7. Agent → Tool edges (invokes) --------------------------------- #
     for aid in resolved_agent_ids:
         for tid in tool_ids:
@@ -524,13 +552,14 @@ def build(
                 Edge(id=_edge_id(source, ext_id, etype.value), source=source, target=ext_id, type=etype)
             )
 
-    # -- 12. Skill nodes from skills.entries -------------------------------- #
+    # -- 12. Skill nodes from skills.entries and filesystem ----------------- #
     skills_cfg: dict[str, Any] = config.get("skills", {})
     skill_entries: dict[str, Any] = skills_cfg.get("entries", {})
     skill_ids: list[str] = []
+    existing_node_ids = {n.id for n in graph.nodes}
 
+    # First, add skills from config (skills.entries)
     if isinstance(skill_entries, dict):
-        existing_node_ids = {n.id for n in graph.nodes}
         for skill_name, skill_cfg in skill_entries.items():
             skill_id = f"skill:{skill_name}"
             if skill_id in existing_node_ids:
@@ -556,17 +585,38 @@ def build(
             existing_node_ids.add(skill_id)
             skill_ids.append(skill_id)
 
-        for aid in resolved_agent_ids:
-            for skill_id in skill_ids:
-                etype = EdgeType.INVOKES
-                source = f"agent:{aid}"
-                graph.edges.append(
-                    Edge(
-                        id=_edge_id(source, skill_id, etype.value),
-                        source=source,
-                        target=skill_id,
-                        type=etype,
-                    )
+    # Second, add skills discovered from filesystem (bundled/installed skills)
+    discovered_skills = list_skills(openclaw_root)
+    for skill_name in discovered_skills:
+        skill_id = f"skill:{skill_name}"
+        if skill_id in existing_node_ids:
+            continue
+        skill_props: dict[str, Any] = {
+            "has_credential": False,
+            "credential_status": "none",
+            "credential_key": "",
+            "credential_tail": "",
+            "risk_level": "high" if skill_name.lower() in _HIGH_RISK_SKILLS else "unknown",
+            "capability": _HIGH_RISK_SKILLS.get(skill_name.lower(), ""),
+        }
+        graph.nodes.append(
+            Node(id=skill_id, type=NodeType.SKILL, label=skill_name, properties=skill_props)
+        )
+        existing_node_ids.add(skill_id)
+        skill_ids.append(skill_id)
+
+    # Create edges from agents to all skills
+    for aid in resolved_agent_ids:
+        for skill_id in skill_ids:
+            etype = EdgeType.INVOKES
+            source = f"agent:{aid}"
+            graph.edges.append(
+                Edge(
+                    id=_edge_id(source, skill_id, etype.value),
+                    source=source,
+                    target=skill_id,
+                    type=etype,
                 )
+            )
 
     return graph

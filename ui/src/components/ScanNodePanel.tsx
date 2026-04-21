@@ -145,6 +145,7 @@ function AgentContent({ p }: { p: Record<string, unknown> }) {
 }
 
 function ToolContent({ p }: { p: Record<string, unknown> }) {
+  const securityLevel = p.security_level ? String(p.security_level) : null
   return (
     <>
       <Field label="Risk">
@@ -152,6 +153,14 @@ function ToolContent({ p }: { p: Record<string, unknown> }) {
          p.dangerous  ? <Badge text="DANGEROUS — arbitrary execution" color="#FF4D4D" /> :
                         <Badge text="Standard" color="#22C55E" />}
       </Field>
+      {securityLevel && (
+        <Field label="Security Level">
+          {securityLevel === 'full' ? <Badge text="FULL — no restrictions" color="#FF4D4D" /> :
+           securityLevel === 'allowlist' ? <Badge text="ALLOWLIST" color="#FFBB00" /> :
+           securityLevel === 'deny' ? <Badge text="DENY LIST" color="#22C55E" /> :
+           <span style={{ color: 'var(--gray-400)' }}>{securityLevel}</span>}
+        </Field>
+      )}
       {Array.isArray(p.allowed_domains) && (
         <Field label="Allowed Domains"><StringList items={p.allowed_domains} /></Field>
       )}

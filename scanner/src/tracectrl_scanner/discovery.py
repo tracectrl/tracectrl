@@ -66,3 +66,15 @@ def list_plugins(root: Path) -> list[str]:
         for entry in extensions_dir.iterdir()
         if entry.is_dir()
     )
+
+
+def list_skills(root: Path) -> list[str]:
+    """Return skill IDs discovered under ``<root>/skills/``."""
+    skills_dir = root / "skills"
+    if not skills_dir.is_dir():
+        return []
+    return sorted(
+        entry.name
+        for entry in skills_dir.iterdir()
+        if entry.is_dir()
+    )
