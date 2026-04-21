@@ -78,6 +78,7 @@ export default function ScanReport() {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [showPassed, setShowPassed] = useState<Record<string, boolean>>({})
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null)
+  const [showSkills, setShowSkills] = useState(true)
   const topologyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { document.title = 'Scan Report \u2014 TraceCtrl' }, [])
@@ -196,6 +197,24 @@ export default function ScanReport() {
     setShowPassed(prev => ({ ...prev, [category]: !prev[category] }))
   }
 
+  const filteredTopology = useMemo(() => {
+    if (!topology) return null
+    if (showSkills) return topology
+
+    // Filter out skill nodes
+    const skillNodeIds = new Set(
+      topology.nodes.filter(n => n.type === 'SKILL').map(n => n.id)
+    )
+
+    return {
+      ...topology,
+      nodes: topology.nodes.filter(n => !skillNodeIds.has(n.id)),
+      edges: topology.edges.filter(e =>
+        !skillNodeIds.has(e.source) && !skillNodeIds.has(e.target)
+      ),
+    }
+  }, [topology, showSkills])
+
   const meta = results.length > 0 ? results[0] : null
 
   return (
@@ -283,10 +302,19 @@ export default function ScanReport() {
             <div className="scan-topology-panel" ref={topologyRef}>
               <div className="scan-topology-header">
                 <span>Architecture Risk View</span>
-                <span>{topology.nodes.length} nodes · {topology.edges.length} edges</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button
+                    className={`phase-toggle${showSkills ? ' active' : ''}`}
+                    onClick={() => setShowSkills(prev => !prev)}
+                    style={{ fontSize: '12px', padding: '4px 10px' }}
+                  >
+                    {showSkills ? 'Hide Skills' : 'Show Skills'}
+                  </button>
+                  <span>{filteredTopology?.nodes.length ?? 0} nodes · {filteredTopology?.edges.length ?? 0} edges</span>
+                </div>
               </div>
               <ScanTopologyCanvas
-                topology={topology}
+                topology={filteredTopology!}
                 nodeRiskMap={nodeRiskMap}
                 onNodeClick={(n) => setSelectedNode(n ?? null)}
                 selectedNodeId={selectedNode?.id ?? null}

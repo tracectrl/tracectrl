@@ -155,11 +155,29 @@ export default function ScanTopologyCanvas({ topology, nodeRiskMap, onNodeClick,
     }
 
     const elements: cytoscape.ElementDefinition[] = []
+    const ingressTypes = new Set(['INGRESS', 'SCHEDULER'])
+
+    // Add invisible anchor node to force ingress nodes to the left
+    elements.push({
+      data: { id: '__anchor__', label: '', nodeType: '__anchor__' },
+    })
 
     for (const node of topology.nodes) {
       elements.push({
         data: { id: node.id, label: node.label, nodeType: node.type, properties: node.properties ?? {} },
       })
+
+      // Add invisible edge from anchor to all ingress nodes to force them left
+      if (ingressTypes.has(node.type)) {
+        elements.push({
+          data: {
+            id: `__anchor_to_${node.id}`,
+            source: '__anchor__',
+            target: node.id,
+            edgeType: '__anchor__',
+          },
+        })
+      }
     }
 
     for (const edge of topology.edges) {
@@ -238,12 +256,27 @@ export default function ScanTopologyCanvas({ topology, nodeRiskMap, onNodeClick,
             'text-rotation': 'autorotate',
           } as cytoscape.Css.Edge,
         },
+        // Hide anchor node and edges
+        {
+          selector: 'node[nodeType="__anchor__"]',
+          style: {
+            'visibility': 'hidden',
+            'width': 1,
+            'height': 1,
+          } as cytoscape.Css.Node,
+        },
+        {
+          selector: 'edge[edgeType="__anchor__"]',
+          style: {
+            'visibility': 'hidden',
+          } as cytoscape.Css.Edge,
+        },
       ],
       layout: {
         name: 'dagre',
         rankDir: 'LR',
-        nodeSep: 50,
-        rankSep: 90,
+        nodeSep: 80,
+        rankSep: 150,
         animate: false,
       } as any,
       userZoomingEnabled: true,

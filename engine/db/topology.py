@@ -361,8 +361,8 @@ def _get_ingress_triggers(service: str | None = None) -> list[dict]:
                     OR JSONExtractString(SpanAttributes['metadata'], 'tracectrl.ingress') = 'true')
                    OR (ParentSpanId = ''
                        AND (SpanAttributes['openinference.span.kind'] = 'AGENT'
-                            OR SpanName LIKE '%.execute'
-                            OR SpanName LIKE 'invoke_agent %')))
+                            OR SpanName LIKE '%%.execute'
+                            OR SpanName LIKE 'invoke_agent %%')))
               AND ServiceName = %(service)s
         """
         rows = execute(query, {"service": service})
@@ -384,8 +384,8 @@ def _get_ingress_triggers(service: str | None = None) -> list[dict]:
                    OR JSONExtractString(SpanAttributes['metadata'], 'tracectrl.ingress') = 'true'
                    OR (ParentSpanId = ''
                        AND (SpanAttributes['openinference.span.kind'] = 'AGENT'
-                            OR SpanName LIKE '%.execute'
-                            OR SpanName LIKE 'invoke_agent %')))
+                            OR SpanName LIKE '%%.execute'
+                            OR SpanName LIKE 'invoke_agent %%')))
         """
         rows = execute(query)
 
