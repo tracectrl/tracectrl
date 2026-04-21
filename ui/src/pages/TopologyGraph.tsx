@@ -24,7 +24,6 @@ export default function TopologyGraphPage() {
   const [attackPaths, setAttackPaths] = useState<AttackPath[]>([])
   const [overlay, setOverlay] = useState<AttackOverlay | null>(null)
   const [selectedAttackPath, setSelectedAttackPath] = useState<AttackPath | null>(null)
-  const [showSkills, setShowSkills] = useState(true)
 
   useEffect(() => { document.title = 'Topology — TraceCtrl' }, [])
 
@@ -85,27 +84,8 @@ export default function TopologyGraphPage() {
     return activeIds.size > 0 ? activeIds : undefined
   }, [replayNs, latestSpans])
 
-  const filteredGraph = useMemo(() => {
-    if (!graph) return null
-    if (showSkills) return graph
-
-    // Filter out skill nodes
-    const skillNodeIds = new Set(
-      graph.nodes.filter(n => n.type === 'skill').map(n => n.id)
-    )
-
-    return {
-      ...graph,
-      nodes: graph.nodes.filter(n => !skillNodeIds.has(n.id)),
-      edges: graph.edges.filter(e =>
-        !skillNodeIds.has(e.source) && !skillNodeIds.has(e.target)
-      ),
-    }
-  }, [graph, showSkills])
-
   const agentCount = graph?.nodes.filter(n => n.type === 'agent').length ?? 0
   const toolCount = graph?.nodes.filter(n => n.type === 'tool').length ?? 0
-  const skillCount = graph?.nodes.filter(n => n.type === 'skill').length ?? 0
 
   return (
     <div>
@@ -117,7 +97,7 @@ export default function TopologyGraphPage() {
             {loading
               ? 'Loading graph...'
               : graph
-                ? `${agentCount} agents · ${toolCount} tools · ${skillCount} skills · ${graph.edges.length} connections`
+                ? `${agentCount} agents · ${toolCount} tools · ${graph.edges.length} connections`
                 : 'No data'}
           </p>
         </div>
@@ -149,15 +129,6 @@ export default function TopologyGraphPage() {
             </button>
           )}
           {!loading && graph && (
-            <button
-              className={`phase-toggle${showSkills ? ' active' : ''}`}
-              onClick={() => setShowSkills(prev => !prev)}
-              aria-pressed={showSkills}
-            >
-              {showSkills ? 'Hide Skills' : 'Show Skills'}
-            </button>
-          )}
-          {!loading && graph && (
             <div className="live-indicator">Live</div>
           )}
         </div>
@@ -185,7 +156,7 @@ export default function TopologyGraphPage() {
       )}
 
       <GraphCanvas
-        data={filteredGraph}
+        data={graph}
         onNodeSelect={handleNodeSelect}
         highlightedNodeIds={highlightedNodeIds}
         phaseGroups={phases}
