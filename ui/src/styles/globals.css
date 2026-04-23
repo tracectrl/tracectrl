@@ -3389,3 +3389,80 @@ h4 {
 }
 .topo-phase-check input { accent-color: var(--red); }
 .topo-phase-check:hover { color: var(--gray-300); }
+
+/* ============================================================
+   Findings sub-category grouping (within a tab)
+   ============================================================ */
+
+.findings-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.findings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.findings-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--dark-border);
+}
+.findings-group-sub {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--white);
+  letter-spacing: 0.01em;
+}
+.findings-group-top {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gray-500);
+}
+.findings-group-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--gray-500);
+  padding: 1px 8px;
+  background: var(--dark-surface);
+  border: 1px solid var(--dark-border);
+  border-radius: 10px;
+}
+
+/* ============================================================
+   Agent brief — button states + in-drawer manual-fix block
+   ============================================================ */
+
+.agent-brief-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 140ms ease;
+}
+.agent-brief-btn:has(:only-child):active { transform: translateY(1px); }
+
+.manual-fix {
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--jade) 6%, var(--dark-surface));
+  border: 1px solid color-mix(in srgb, var(--jade) 25%, var(--dark-border));
+  border-radius: 8px;
+}
+.manual-fix-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.manual-fix-hint {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--gray-400);
+  margin: 0;
+}

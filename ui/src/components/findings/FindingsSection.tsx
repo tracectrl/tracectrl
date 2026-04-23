@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ScanResult, ScanTopology, applyFixes } from '../../api/scan'
 import { SelectedNode } from '../ScanTopologyCanvas'
 import { AUTO_FIXABLE_IDS } from '../../data/fixSnippets'
+import { categorize, TopCategory, TOP_ORDER } from '../../data/checkCategories'
+import { buildAggregateBrief } from '../../utils/agentBrief'
 import FindingsTabs, { TabStat } from './FindingsTabs'
 import FindingCard from './FindingCard'
 import FindingDrawer from './FindingDrawer'
@@ -9,27 +11,6 @@ import FindingDrawer from './FindingDrawer'
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 4, high: 3, medium: 2, low: 1, pass: 0,
 }
-
-const CATEGORY_MAP: Record<string, string> = {
-  'Network': 'Security',
-  'Credentials': 'Security',
-  'Tools': 'Security',
-  'Ingress': 'Security',
-  'Guardrails': 'Security',
-  'Filesystem': 'Security',
-  'Lateral Movement': 'Security',
-  'Plugins': 'Security',
-  'LLM Providers': 'Security',
-  'Logging': 'Security',
-  'Security': 'Security',
-  'Skills': 'Security',
-  'Persistence': 'Security',
-  'Operational': 'Operational',
-  'Performance': 'Performance',
-  'Compliance': 'Compliance',
-}
-
-const CATEGORY_ORDER = ['Security', 'Operational', 'Performance', 'Compliance']
 
 const SECTION_PREFIX_MAP: Record<string, string[]> = {
   'Ingress':          ['ingress:'],
@@ -85,12 +66,7 @@ export default function FindingsSection({
   const [fixingId, setFixingId] = useState<string | null>(null)
   const [fixingAll, setFixingAll] = useState(false)
   const [fixError, setFixError] = useState<string | null>(null)
-
-  // Category for each result, plus a stable sorted list grouped by category.
-  const categoryOf = useCallback(
-    (r: ScanResult) => CATEGORY_MAP[r.section] ?? 'Security',
-    []
-  )
+  const [briefCopied, setBriefCopied] = useState(false)
 
   const sortResults = useCallback((a: ScanResult, b: ScanResult) => {
     const aOrd = SEVERITY_ORDER[a.severity.toLowerCase()] ?? 0
@@ -99,42 +75,59 @@ export default function FindingsSection({
     return a.check_id.localeCompare(b.check_id)
   }, [])
 
-  // Category stats for tabs
+  // Tab stats by top category
   const tabs = useMemo<TabStat[]>(() => {
-    const counts = new Map<string, { total: number; failed: number }>()
-    for (const cat of CATEGORY_ORDER) counts.set(cat, { total: 0, failed: 0 })
+    const counts = new Map<TopCategory, { total: number; failed: number }>()
+    for (const t of TOP_ORDER) counts.set(t, { total: 0, failed: 0 })
     let total = 0
     let failed = 0
     for (const r of results) {
-      const cat = categoryOf(r)
-      const c = counts.get(cat)
+      const c = counts.get(categorize(r.check_id).top)
       if (!c) continue
       c.total++
       total++
       if (r.passed !== 1) { c.failed++; failed++ }
     }
     const out: TabStat[] = [{ key: 'all', label: 'All', total, failed }]
-    for (const cat of CATEGORY_ORDER) {
-      const c = counts.get(cat)!
+    for (const t of TOP_ORDER) {
+      const c = counts.get(t)!
       if (c.total === 0) continue
-      out.push({ key: cat, label: cat, total: c.total, failed: c.failed })
+      out.push({ key: t, label: t, total: c.total, failed: c.failed })
     }
     return out
-  }, [results, categoryOf])
+  }, [results])
 
   // Filtered + sorted visible list driving the grid
   const visible = useMemo(() => {
     const filtered = results.filter(r => {
-      if (activeTab !== 'all' && categoryOf(r) !== activeTab) return false
+      if (activeTab !== 'all' && categorize(r.check_id).top !== activeTab) return false
       if (r.passed === 1) return showPassed
       if (severity !== 'all' && r.severity.toLowerCase() !== severity) return false
       return true
     })
     filtered.sort(sortResults)
     return filtered
-  }, [results, activeTab, severity, showPassed, categoryOf, sortResults])
+  }, [results, activeTab, severity, showPassed, sortResults])
 
-  // Auto-open drawer navigation (j/k, arrow)
+  // Group visible findings by sub-category, preserving subOrder for stable layout.
+  const grouped = useMemo(() => {
+    const map = new Map<string, { top: TopCategory; sub: string; subOrder: number; items: ScanResult[] }>()
+    for (const r of visible) {
+      const c = categorize(r.check_id)
+      const key = `${c.top} :: ${c.sub}`
+      const existing = map.get(key)
+      if (existing) existing.items.push(r)
+      else map.set(key, { top: c.top, sub: c.sub, subOrder: c.subOrder, items: [r] })
+    }
+    // Order groups by TopCategory then subOrder
+    return Array.from(map.values()).sort((a, b) => {
+      const aT = TOP_ORDER.indexOf(a.top)
+      const bT = TOP_ORDER.indexOf(b.top)
+      if (aT !== bT) return aT - bT
+      return a.subOrder - b.subOrder
+    })
+  }, [visible])
+
   const openResult = visible.find(r => r.check_id === openId) ?? null
   const openIndex = openResult ? visible.findIndex(r => r.check_id === openResult.check_id) : -1
 
@@ -168,7 +161,7 @@ export default function FindingsSection({
     return () => openCard(visible[openIndex + 1])
   }, [openIndex, visible, openCard])
 
-  // Grid-level keyboard: when drawer closed, arrow/j/k moves focus; Enter opens.
+  // Grid-level keyboard
   useEffect(() => {
     if (openId) return
     const onKey = (e: KeyboardEvent) => {
@@ -197,7 +190,6 @@ export default function FindingsSection({
     return () => window.removeEventListener('keydown', onKey)
   }, [openId, visible, focusedId, openCard])
 
-  // Ensure focused card stays in the visible list when filters change.
   useEffect(() => {
     if (focusedId && !visible.find(r => r.check_id === focusedId)) {
       setFocusedId(visible[0]?.check_id ?? null)
@@ -207,6 +199,13 @@ export default function FindingsSection({
   const unfixedAutoFixable = useMemo(
     () => results.filter(r => r.passed !== 1 && AUTO_FIXABLE_IDS.has(r.check_id) && !fixedIds.has(r.check_id)),
     [results, fixedIds]
+  )
+
+  // Non-auto-fixable failing findings — the pool for the agent brief button.
+  const manualFailing = useMemo(
+    () => results.filter(r => r.passed !== 1 && !AUTO_FIXABLE_IDS.has(r.check_id) && !fixedIds.has(r.check_id))
+                 .sort(sortResults),
+    [results, fixedIds, sortResults]
   )
 
   const handleFix = useCallback(
@@ -231,7 +230,19 @@ export default function FindingsSection({
     [workspacePath, fixedIds, onFixApplied]
   )
 
-  const showEmpty = visible.length === 0
+  const handleCopyBrief = useCallback(async () => {
+    if (manualFailing.length === 0) return
+    const md = buildAggregateBrief(manualFailing, { workspacePath })
+    try {
+      await navigator.clipboard.writeText(md)
+      setBriefCopied(true)
+      window.setTimeout(() => setBriefCopied(false), 2200)
+    } catch {
+      // no-op; clipboard may be unavailable in non-https contexts
+    }
+  }, [manualFailing, workspacePath])
+
+  const showEmpty = grouped.length === 0
 
   return (
     <section className="findings-section">
@@ -266,6 +277,15 @@ export default function FindingsSection({
               {fixingAll ? 'Fixing…' : `Fix All (${unfixedAutoFixable.length})`}
             </button>
           )}
+          {manualFailing.length > 0 && (
+            <button
+              className="btn btn-ghost btn-sm agent-brief-btn"
+              onClick={handleCopyBrief}
+              title="Copy a markdown prompt for a coding agent to fix the non-auto-fixable findings"
+            >
+              {briefCopied ? '✓ Copied' : `Copy Agent Brief (${manualFailing.length})`}
+            </button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={onRescan}>Rescan</button>
         </div>
       </div>
@@ -283,25 +303,35 @@ export default function FindingsSection({
           </p>
         </div>
       ) : (
-        <div className="findings-grid" role="list">
-          {visible.map(r => {
-            const cat = categoryOf(r)
-            const autoFixable = AUTO_FIXABLE_IDS.has(r.check_id)
-            const fixed = fixedIds.has(r.check_id)
-            return (
-              <div role="listitem" key={r.check_id}>
-                <FindingCard
-                  result={r}
-                  category={cat}
-                  autoFixable={autoFixable}
-                  fixed={fixed}
-                  focused={focusedId === r.check_id}
-                  onOpen={() => openCard(r)}
-                  onFocus={() => setFocusedId(r.check_id)}
-                />
+        <div className="findings-groups">
+          {grouped.map(group => (
+            <div className="findings-group" key={`${group.top}::${group.sub}`}>
+              <div className="findings-group-head">
+                <span className="findings-group-sub">{group.sub}</span>
+                <span className="findings-group-top">{group.top}</span>
+                <span className="findings-group-count">{group.items.length}</span>
               </div>
-            )
-          })}
+              <div className="findings-grid" role="list">
+                {group.items.map(r => {
+                  const autoFixable = AUTO_FIXABLE_IDS.has(r.check_id)
+                  const fixed = fixedIds.has(r.check_id)
+                  return (
+                    <div role="listitem" key={r.check_id}>
+                      <FindingCard
+                        result={r}
+                        category={group.sub}
+                        autoFixable={autoFixable}
+                        fixed={fixed}
+                        focused={focusedId === r.check_id}
+                        onOpen={() => openCard(r)}
+                        onFocus={() => setFocusedId(r.check_id)}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -311,11 +341,12 @@ export default function FindingsSection({
 
       <FindingDrawer
         result={openResult}
-        category={openResult ? categoryOf(openResult) : ''}
+        category={openResult ? categorize(openResult.check_id).sub : ''}
         autoFixable={openResult ? AUTO_FIXABLE_IDS.has(openResult.check_id) : false}
         fixed={openResult ? fixedIds.has(openResult.check_id) : false}
         fixing={!!openResult && fixingId === openResult.check_id}
         open={!!openResult}
+        workspacePath={workspacePath}
         onClose={closeDrawer}
         onFix={id => handleFix([id])}
         onPrev={openPrev}

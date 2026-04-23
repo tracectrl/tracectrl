@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ScanResult } from '../../api/scan'
 import ConfigCodeBlock from '../ConfigCodeBlock'
 import Drawer, { DrawerClose } from '../shared/Drawer'
+import { buildSingleBrief } from '../../utils/agentBrief'
 
 interface Props {
   result: ScanResult | null
@@ -10,6 +11,7 @@ interface Props {
   fixed: boolean
   fixing: boolean
   open: boolean
+  workspacePath?: string
   onClose: () => void
   onFix: (checkId: string) => void
   onPrev?: () => void
@@ -30,11 +32,16 @@ export default function FindingDrawer({
   fixed,
   fixing,
   open,
+  workspacePath,
   onClose,
   onFix,
   onPrev,
   onNext,
 }: Props) {
+  const [briefCopied, setBriefCopied] = useState(false)
+
+  useEffect(() => { setBriefCopied(false) }, [result?.check_id])
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -104,6 +111,30 @@ export default function FindingDrawer({
           <section className="drawer-section">
             <h4 className="drawer-h">Source</h4>
             <code className="drawer-mono-path">{result.config_path}</code>
+          </section>
+        )}
+
+        {!autoFixable && !fixed && !passed && (
+          <section className="drawer-section manual-fix">
+            <div className="manual-fix-head">
+              <h4 className="drawer-h" style={{ margin: 0 }}>Manual fix — agent brief</h4>
+              <button
+                className="btn btn-ghost btn-sm agent-brief-btn"
+                onClick={async () => {
+                  const md = buildSingleBrief(result, { workspacePath })
+                  try {
+                    await navigator.clipboard.writeText(md)
+                    setBriefCopied(true)
+                    window.setTimeout(() => setBriefCopied(false), 2200)
+                  } catch { /* clipboard unavailable */ }
+                }}
+              >
+                {briefCopied ? '✓ Copied' : 'Copy for agent'}
+              </button>
+            </div>
+            <p className="manual-fix-hint">
+              This check has no auto-fixer. Paste the copied brief into your coding agent (Claude, Cursor, Aider) and it will walk through the remediation.
+            </p>
           </section>
         )}
       </div>
