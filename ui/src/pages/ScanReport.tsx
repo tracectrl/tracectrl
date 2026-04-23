@@ -3,6 +3,8 @@ import { fetchLatestScan, ScanResult, ScanTopology } from '../api/scan'
 import ScanTopologyCanvas, { SelectedNode } from '../components/ScanTopologyCanvas'
 import ScanNodePanel from '../components/ScanNodePanel'
 import FindingsSection from '../components/findings/FindingsSection'
+import EmptyState from '../components/shared/EmptyState'
+import ErrorBanner from '../components/shared/ErrorBanner'
 
 const SECTION_PREFIX_MAP: Record<string, string[]> = {
   'Ingress':          ['ingress:'],
@@ -22,7 +24,8 @@ export default function ScanReport() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [topology, setTopology] = useState<ScanTopology | null>(null)
-  const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null)
+  const [highlightNode, setHighlightNode] = useState<SelectedNode | null>(null)
+  const [panelNode, setPanelNode] = useState<SelectedNode | null>(null)
   const [showSkills, setShowSkills] = useState(true)
   const topologyRef = useRef<HTMLDivElement>(null)
 
@@ -42,19 +45,6 @@ export default function ScanReport() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
-
-  const counts = useMemo(() => {
-    let critical = 0, high = 0, medium = 0, passed = 0
-    for (const r of results) {
-      if (r.passed === 1) { passed++; continue }
-      const s = r.severity.toLowerCase()
-      if (s === 'critical') critical++
-      else if (s === 'high') high++
-      else if (s === 'medium') medium++
-      else passed++
-    }
-    return { critical, high, medium, pass: passed }
-  }, [results])
 
   const nodeRiskMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -116,71 +106,29 @@ export default function ScanReport() {
         </p>
       </div>
 
-      {error && (
-        <div className="error-banner">
-          {error}
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ marginLeft: 'auto' }}
-            onClick={loadData}
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ErrorBanner error={error} onRetry={loadData} />}
 
       {loading ? (
         <>
-          <div className="scan-severity-grid">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="loading-skeleton" style={{ height: 90 }} />
-            ))}
-          </div>
-          <div className="table-container">
+          <div className="loading-skeleton" style={{ height: 320, marginBottom: 'var(--space-6)' }} />
+          <div className="findings-grid" style={{ marginTop: 'var(--space-5)' }}>
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="loading-skeleton" style={{ height: 44, marginBottom: 2 }} />
+              <div key={i} className="loading-skeleton" style={{ height: 132 }} />
             ))}
           </div>
         </>
       ) : results.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
+        <EmptyState
+          title="No Scan Results Yet"
+          hint="Run an OpenClaw security scan to see compliance findings here."
+          icon={
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
-          </div>
-          <h3>No Scan Results Yet</h3>
-          <p>Run an OpenClaw security scan to see compliance findings here.</p>
-        </div>
+          }
+        />
       ) : (
         <>
-          <div className="scan-severity-grid">
-            <div className="scan-severity-card">
-              <div className="scan-severity-count" style={{ color: 'var(--risk-critical)' }}>
-                {counts.critical}
-              </div>
-              <div className="scan-severity-label">Critical</div>
-            </div>
-            <div className="scan-severity-card">
-              <div className="scan-severity-count" style={{ color: 'var(--risk-high)' }}>
-                {counts.high}
-              </div>
-              <div className="scan-severity-label">High</div>
-            </div>
-            <div className="scan-severity-card">
-              <div className="scan-severity-count" style={{ color: 'var(--risk-medium)' }}>
-                {counts.medium}
-              </div>
-              <div className="scan-severity-label">Medium</div>
-            </div>
-            <div className="scan-severity-card">
-              <div className="scan-severity-count" style={{ color: 'var(--risk-low)' }}>
-                {counts.pass}
-              </div>
-              <div className="scan-severity-label">Pass</div>
-            </div>
-          </div>
-
           {topology && topology.nodes.length > 0 && (
             <div className="scan-topology-panel" ref={topologyRef}>
               <div className="scan-topology-header">
@@ -189,6 +137,7 @@ export default function ScanReport() {
                   <button
                     className={`phase-toggle${showSkills ? ' active' : ''}`}
                     onClick={() => setShowSkills(prev => !prev)}
+                    aria-pressed={showSkills}
                     style={{ fontSize: '12px', padding: '4px 10px' }}
                   >
                     {showSkills ? 'Hide Skills' : 'Show Skills'}
@@ -199,8 +148,8 @@ export default function ScanReport() {
               <ScanTopologyCanvas
                 topology={filteredTopology!}
                 nodeRiskMap={nodeRiskMap}
-                onNodeClick={(n) => setSelectedNode(n ?? null)}
-                selectedNodeId={selectedNode?.id ?? null}
+                onNodeClick={(n) => { setHighlightNode(n ?? null); setPanelNode(n ?? null) }}
+                selectedNodeId={highlightNode?.id ?? null}
               />
             </div>
           )}
@@ -210,13 +159,13 @@ export default function ScanReport() {
             topology={topology}
             workspacePath={meta?.openclaw_path ?? ''}
             onRescan={loadData}
-            onSelectNode={setSelectedNode}
+            onSelectNode={setHighlightNode}
             onScrollToTopology={scrollToTopology}
             onFixApplied={() => loadData()}
           />
         </>
       )}
-      <ScanNodePanel node={selectedNode} onClose={() => setSelectedNode(null)} />
+      <ScanNodePanel node={panelNode} onClose={() => setPanelNode(null)} />
     </div>
   )
 }

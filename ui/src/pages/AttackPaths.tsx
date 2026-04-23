@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { fetchAttackPaths, AttackPath, severityBadgeClass, severityColor } from '../api/risk'
+import SortableTh from '../components/shared/SortableTh'
+import EmptyState from '../components/shared/EmptyState'
+import ErrorBanner from '../components/shared/ErrorBanner'
 import { useProject } from '../context/ProjectContext'
 
 type SortKey = 'risk_score' | 'owasp_category' | 'rule_name'
@@ -15,13 +18,16 @@ export default function AttackPaths() {
 
   useEffect(() => { document.title = 'Attack Paths — TraceCtrl' }, [])
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null)
     setLoading(true)
     fetchAttackPaths(selectedProject)
       .then(setPaths)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [selectedProject])
+
+  useEffect(() => { load() }, [load])
 
   const sorted = useMemo(() => {
     const copy = [...paths]
@@ -40,14 +46,9 @@ export default function AttackPaths() {
     else { setSortKey(key); setSortDir('desc') }
   }
 
-  const sortIndicator = (key: SortKey) => {
-    if (sortKey !== key) return ''
-    return sortDir === 'asc' ? ' \u2191' : ' \u2193'
-  }
-
-  const handleRowClick = useCallback((pathId: string) => {
-    setExpandedPathId(expandedPathId === pathId ? null : pathId)
-  }, [expandedPathId])
+  const handleRowActivate = useCallback((pathId: string) => {
+    setExpandedPathId(prev => prev === pathId ? null : pathId)
+  }, [])
 
   return (
     <div>
@@ -55,20 +56,11 @@ export default function AttackPaths() {
         <div className="section-tag">Security</div>
         <h2>Attack Paths</h2>
         <p className="page-meta" aria-live="polite">
-          {loading
-            ? 'Loading attack paths...'
-            : `${paths.length} paths`}
+          {loading ? 'Loading attack paths...' : `${paths.length} paths`}
         </p>
       </div>
 
-      {error && (
-        <div className="error-banner">
-          {error}
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); setLoading(true); fetchAttackPaths(selectedProject).then(setPaths).catch(err => setError(err.message)).finally(() => setLoading(false)); }}>
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ErrorBanner error={error} onRetry={load} />}
 
       {loading ? (
         <div className="table-container">
@@ -77,15 +69,15 @@ export default function AttackPaths() {
           ))}
         </div>
       ) : paths.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
+        <EmptyState
+          title="No Attack Paths Detected"
+          hint="No attack paths detected — your agents look secure."
+          icon={
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-          </div>
-          <h3>No Attack Paths Detected</h3>
-          <p>No attack paths detected — your agents look secure!</p>
-        </div>
+          }
+        />
       ) : (
         <div className="sessions-list">
           <div className="table-container">
@@ -93,33 +85,31 @@ export default function AttackPaths() {
               <thead>
                 <tr>
                   <th style={{ width: 28 }} />
-                  <th onClick={() => toggleSort('risk_score')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'risk_score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Risk Score{sortIndicator('risk_score')}
-                  </th>
+                  <SortableTh active={sortKey === 'risk_score'} direction={sortDir} onToggle={() => toggleSort('risk_score')}>Risk Score</SortableTh>
                   <th>Severity</th>
-                  <th onClick={() => toggleSort('owasp_category')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'owasp_category' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    OWASP Category{sortIndicator('owasp_category')}
-                  </th>
-                  <th onClick={() => toggleSort('rule_name')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'rule_name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Rule Name{sortIndicator('rule_name')}
-                  </th>
+                  <SortableTh active={sortKey === 'owasp_category'} direction={sortDir} onToggle={() => toggleSort('owasp_category')}>OWASP Category</SortableTh>
+                  <SortableTh active={sortKey === 'rule_name'} direction={sortDir} onToggle={() => toggleSort('rule_name')}>Rule Name</SortableTh>
                   <th>Agents Involved</th>
                 </tr>
               </thead>
               <tbody>
                 {sorted.map(path => {
                   const isExpanded = expandedPathId === path.path_id
-
                   return (
                     <React.Fragment key={path.path_id}>
                       <tr
-                        onClick={() => handleRowClick(path.path_id)}
+                        onClick={() => handleRowActivate(path.path_id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRowActivate(path.path_id) }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-expanded={isExpanded}
                         style={{ cursor: 'pointer' }}
                         className={isExpanded ? 'selected' : ''}
-                        aria-expanded={isExpanded}
                       >
                         <td style={{ width: 28, textAlign: 'center', color: 'var(--gray-500)', fontSize: 10 }}>
-                          {isExpanded ? '\u25BC' : '\u25B6'}
+                          {isExpanded ? '▼' : '▶'}
                         </td>
                         <td className="mono" style={{ color: severityColor(path.severity) }}>
                           {path.risk_score}

@@ -2,6 +2,9 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { fetchSessions, fetchTraceSpans, SessionSummary, SpanDetail, formatDuration } from '../api/sessions'
 import TraceTreeView from '../components/TraceTreeView'
 import SpanDetailPanel from '../components/SpanDetailPanel'
+import SortableTh from '../components/shared/SortableTh'
+import EmptyState from '../components/shared/EmptyState'
+import ErrorBanner from '../components/shared/ErrorBanner'
 import { useProject } from '../context/ProjectContext'
 
 type SortKey = 'start_time' | 'total_duration_ns' | 'span_count' | 'root_span_name'
@@ -14,7 +17,6 @@ export default function Sessions() {
   const [sortKey, setSortKey] = useState<SortKey>('start_time')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
-  // Inline expansion state
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null)
   const [expandedSpans, setExpandedSpans] = useState<SpanDetail[]>([])
   const [expandedLoading, setExpandedLoading] = useState(false)
@@ -22,13 +24,16 @@ export default function Sessions() {
 
   useEffect(() => { document.title = 'Sessions — TraceCtrl' }, [])
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null)
     setLoading(true)
     fetchSessions(selectedProject)
       .then(setSessions)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [selectedProject])
+
+  useEffect(() => { load() }, [load])
 
   const sorted = useMemo(() => {
     const copy = [...sessions]
@@ -48,11 +53,6 @@ export default function Sessions() {
     else { setSortKey(key); setSortDir('desc') }
   }
 
-  const sortIndicator = (key: SortKey) => {
-    if (sortKey !== key) return ''
-    return sortDir === 'asc' ? ' \u2191' : ' \u2193'
-  }
-
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     return d.toLocaleString(undefined, {
@@ -61,16 +61,14 @@ export default function Sessions() {
     })
   }
 
-  const handleRowClick = useCallback((session: SessionSummary) => {
+  const handleRowActivate = useCallback((session: SessionSummary) => {
     const traceId = session.trace_id
     if (expandedTraceId === traceId) {
-      // Collapse
       setExpandedTraceId(null)
       setExpandedSpans([])
       setSelectedSpan(null)
       return
     }
-    // Expand — for merged OpenClaw sessions, fetch spans from all trace IDs
     setExpandedTraceId(traceId)
     setExpandedLoading(true)
     setSelectedSpan(null)
@@ -87,7 +85,6 @@ export default function Sessions() {
     setSelectedSpan(span)
   }, [])
 
-  // Compute max duration for waterfall bar sizing
   const maxDuration = useMemo(() => {
     if (sessions.length === 0) return 1
     return Math.max(...sessions.map(s => s.total_duration_ns))
@@ -95,9 +92,9 @@ export default function Sessions() {
 
   const p95Duration = useMemo(() => {
     if (sessions.length < 4) return Infinity
-    const sorted = [...sessions].map(s => s.total_duration_ns).sort((a, b) => a - b)
-    const idx = Math.floor(sorted.length * 0.95)
-    return sorted[Math.min(idx, sorted.length - 1)]
+    const sortedD = [...sessions].map(s => s.total_duration_ns).sort((a, b) => a - b)
+    const idx = Math.floor(sortedD.length * 0.95)
+    return sortedD[Math.min(idx, sortedD.length - 1)]
   }, [sessions])
 
   return (
@@ -106,20 +103,11 @@ export default function Sessions() {
         <div className="section-tag">Monitor</div>
         <h2>Sessions</h2>
         <p className="page-meta" aria-live="polite">
-          {loading
-            ? 'Loading sessions...'
-            : `${sessions.length} traces`}
+          {loading ? 'Loading sessions...' : `${sessions.length} traces`}
         </p>
       </div>
 
-      {error && (
-        <div className="error-banner">
-          {error}
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); setLoading(true); fetchSessions(selectedProject).then(setSessions).catch(err => setError(err.message)).finally(() => setLoading(false)); }}>
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ErrorBanner error={error} onRetry={load} />}
 
       {loading ? (
         <div className="table-container">
@@ -128,15 +116,15 @@ export default function Sessions() {
           ))}
         </div>
       ) : sessions.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
+        <EmptyState
+          title="No Sessions Yet"
+          hint="Sessions will appear here once your instrumented agents start sending traces via OpenTelemetry."
+          icon={
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
             </svg>
-          </div>
-          <h3>No Sessions Yet</h3>
-          <p>Sessions will appear here once your instrumented agents start sending traces via OpenTelemetry.</p>
-        </div>
+          }
+        />
       ) : (
         <div className="sessions-list">
           <div className="table-container">
@@ -144,21 +132,13 @@ export default function Sessions() {
               <thead>
                 <tr>
                   <th style={{ width: 28 }} />
-                  <th onClick={() => toggleSort('root_span_name')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'root_span_name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Root Span{sortIndicator('root_span_name')}
-                  </th>
+                  <SortableTh active={sortKey === 'root_span_name'} direction={sortDir} onToggle={() => toggleSort('root_span_name')}>Root Span</SortableTh>
                   <th>Agent</th>
-                  <th onClick={() => toggleSort('span_count')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'span_count' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Spans{sortIndicator('span_count')}
-                  </th>
-                  <th onClick={() => toggleSort('total_duration_ns')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'total_duration_ns' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Duration{sortIndicator('total_duration_ns')}
-                  </th>
+                  <SortableTh active={sortKey === 'span_count'} direction={sortDir} onToggle={() => toggleSort('span_count')}>Spans</SortableTh>
+                  <SortableTh active={sortKey === 'total_duration_ns'} direction={sortDir} onToggle={() => toggleSort('total_duration_ns')}>Duration</SortableTh>
                   <th style={{ minWidth: 120 }}>Waterfall</th>
                   <th>Status</th>
-                  <th onClick={() => toggleSort('start_time')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'start_time' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Time{sortIndicator('start_time')}
-                  </th>
+                  <SortableTh active={sortKey === 'start_time'} direction={sortDir} onToggle={() => toggleSort('start_time')}>Time</SortableTh>
                 </tr>
               </thead>
               <tbody>
@@ -171,13 +151,18 @@ export default function Sessions() {
                   return (
                     <React.Fragment key={session.trace_id}>
                       <tr
-                        onClick={() => handleRowClick(session)}
+                        onClick={() => handleRowActivate(session)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRowActivate(session) }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-expanded={isExpanded}
                         style={{ cursor: 'pointer' }}
                         className={isExpanded ? 'selected' : ''}
-                        aria-expanded={isExpanded}
                       >
                         <td style={{ width: 28, textAlign: 'center', color: 'var(--gray-500)', fontSize: 10 }}>
-                          {isExpanded ? '\u25BC' : '\u25B6'}
+                          {isExpanded ? '▼' : '▶'}
                         </td>
                         <td className="primary">{session.root_span_name}</td>
                         <td>{session.agent_name || <span className="text-muted">&mdash;</span>}</td>
@@ -206,7 +191,6 @@ export default function Sessions() {
                         <td className="text-muted">{formatTime(session.start_time)}</td>
                       </tr>
 
-                      {/* Inline expansion row — trace tree + detail panel */}
                       {isExpanded && (
                         <tr className="session-expanded-row">
                           <td colSpan={8} style={{ padding: 0 }}>
@@ -219,7 +203,6 @@ export default function Sessions() {
                                 </div>
                               ) : (
                                 <>
-                                  {/* Trace header */}
                                   <div className="trace-inline-header">
                                     <div className="trace-inline-title">Trace Details</div>
                                     <div className="trace-inline-meta">
@@ -241,7 +224,6 @@ export default function Sessions() {
                                     </div>
                                   </div>
 
-                                  {/* Two-column layout: tree + detail */}
                                   <div className="session-trace-layout">
                                     <div className="session-trace-left">
                                       <TraceTreeView
@@ -276,7 +258,6 @@ export default function Sessions() {
               </tbody>
             </table>
           </div>
-
         </div>
       )}
     </div>

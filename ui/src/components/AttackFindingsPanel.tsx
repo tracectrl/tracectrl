@@ -1,5 +1,6 @@
-import { CSSProperties, useState } from 'react'
+import { useState } from 'react'
 import { AttackPath } from '../api/client'
+import Drawer, { DrawerClose } from './shared/Drawer'
 
 interface AttackFindingsPanelProps {
   paths: AttackPath[]
@@ -15,410 +16,223 @@ interface MitigationSuggestion {
   target?: string
 }
 
+type Tone = 'critical' | 'high' | 'medium' | 'low' | 'neutral'
+
+function severityTone(severity: string): Tone {
+  const s = severity.toUpperCase()
+  if (s === 'CRITICAL') return 'critical'
+  if (s === 'HIGH') return 'high'
+  if (s === 'MEDIUM') return 'medium'
+  if (s === 'LOW') return 'low'
+  return 'neutral'
+}
+
+function formatTitle(title: string): string {
+  return title
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function PathChain({ nodes }: { nodes: string[] }) {
+  return (
+    <>
+      {nodes.map((node, i) => {
+        let label = node
+        if (node === 'external_input') label = 'External Input'
+        else if (node.startsWith('tool:')) label = node.substring(5)
+        else if (node.startsWith('ingress:')) label = node.substring(8)
+        return (
+          <span key={i}>
+            {i > 0 && <span className="chain-arrow"> → </span>}
+            <span className="chain-node">{label}</span>
+          </span>
+        )
+      })}
+    </>
+  )
+}
+
+function generateMitigations(path: AttackPath): MitigationSuggestion[] {
+  const suggestions: MitigationSuggestion[] = []
+  const pathNodes = path.path_nodes || []
+
+  const hasExternalIngress = pathNodes.some((n) => n.startsWith('ingress:'))
+  if (hasExternalIngress) {
+    const ingressNode = pathNodes.find((n) => n.startsWith('ingress:'))
+    const ingressType = ingressNode?.split(':')[1] || 'external'
+    suggestions.push({
+      type: 'input_validation',
+      priority: 'high',
+      suggestion: `Add input validation and sanitization at ${ingressType} ingress point to detect and block malicious payloads`,
+      target: ingressNode,
+    })
+  }
+
+  const hasFinancialOps = pathNodes.some((n) => n.includes('payment') || n.includes('billing') || n.includes('financial'))
+  if (hasFinancialOps) {
+    suggestions.push({
+      type: 'human_review',
+      priority: 'high',
+      suggestion: 'Require human-in-the-loop approval for all financial operations above a threshold',
+      target: pathNodes.find((n) => n.includes('payment') || n.includes('billing')),
+    })
+  }
+
+  const hasExfiltration = pathNodes.some((n) => n.includes('send_email') || n.includes('external_api'))
+  if (hasExfiltration) {
+    const exfilTool = pathNodes.find((n) => n.includes('send_email') || n.includes('external_api'))
+    suggestions.push({
+      type: 'access_control',
+      priority: 'high',
+      suggestion: 'Implement data loss prevention (DLP) controls to scan and block sensitive data from being exfiltrated',
+      target: exfilTool,
+    })
+  }
+
+  const hasCodeExec = pathNodes.some((n) => n.includes('execute') || n.includes('code_execution'))
+  if (hasCodeExec) {
+    suggestions.push({
+      type: 'access_control',
+      priority: 'high',
+      suggestion: 'Disable code execution capabilities or sandbox the execution environment with strict permissions',
+    })
+  }
+
+  const agentNodes = pathNodes.filter((n) => !n.startsWith('tool:') && !n.startsWith('ingress:'))
+  if (agentNodes.length > 3) {
+    suggestions.push({
+      type: 'architecture',
+      priority: 'medium',
+      suggestion: `Reduce agent chain complexity (currently ${agentNodes.length} agents). Consolidate agents or add validation checkpoints between hops`,
+    })
+  }
+
+  const hasCompromisedTool = pathNodes[0]?.startsWith('tool:')
+  if (hasCompromisedTool) {
+    const toolName = pathNodes[0]?.split(':')[1]
+    suggestions.push({
+      type: 'input_validation',
+      priority: 'high',
+      suggestion: `Validate and sanitize data from external tool "${toolName}" before processing. Consider the tool output as untrusted input`,
+      target: pathNodes[0],
+    })
+  }
+
+  const firstAgent = agentNodes[0]
+  if (firstAgent && hasExternalIngress) {
+    suggestions.push({
+      type: 'guardrail',
+      priority: 'high',
+      suggestion: `Add prompt injection detection guardrails for agent "${firstAgent}" to filter malicious instructions`,
+      target: firstAgent,
+    })
+  }
+
+  suggestions.push({
+    type: 'guardrail',
+    priority: 'low',
+    suggestion: 'Enable real-time monitoring and alerting for suspicious patterns in this attack path',
+  })
+
+  return suggestions
+}
+
 export default function AttackFindingsPanel({ paths, selectedPath, onPathSelect, onClose }: AttackFindingsPanelProps) {
   const [expandedMitigation, setExpandedMitigation] = useState<string | null>(null)
 
-  const severityColor = (severity: string): string => {
-    switch (severity) {
-      case 'CRITICAL': return '#EF4444'
-      case 'HIGH': return '#F97316'
-      case 'MEDIUM': return '#EAB308'
-      case 'LOW': return '#10B981'
-      default: return '#6B7280'
-    }
-  }
-
-  const generateMitigations = (path: AttackPath): MitigationSuggestion[] => {
-    const suggestions: MitigationSuggestion[] = []
-    const pathNodes = path.path_nodes || []
-
-    // Check if path starts with ingress (external input)
-    const hasExternalIngress = pathNodes.some(node => node.startsWith('ingress:'))
-    if (hasExternalIngress) {
-      const ingressNode = pathNodes.find(node => node.startsWith('ingress:'))
-      const ingressType = ingressNode?.split(':')[1] || 'external'
-      suggestions.push({
-        type: 'input_validation',
-        priority: 'high',
-        suggestion: `Add input validation and sanitization at ${ingressType} ingress point to detect and block malicious payloads`,
-        target: ingressNode,
-      })
-    }
-
-    // Check for financial/payment operations based on node names
-    const hasFinancialOps = pathNodes.some(node =>
-      node.includes('payment') || node.includes('billing') || node.includes('financial')
-    )
-    if (hasFinancialOps) {
-      suggestions.push({
-        type: 'human_review',
-        priority: 'high',
-        suggestion: 'Require human-in-the-loop approval for all financial operations above a threshold',
-        target: pathNodes.find(node => node.includes('payment') || node.includes('billing')),
-      })
-    }
-
-    // Check for data exfiltration (email, external API)
-    const hasExfiltration = pathNodes.some(node =>
-      node.includes('send_email') ||
-      node.includes('external_api')
-    )
-    if (hasExfiltration) {
-      const exfilTool = pathNodes.find(n => n.includes('send_email') || n.includes('external_api'))
-      suggestions.push({
-        type: 'access_control',
-        priority: 'high',
-        suggestion: 'Implement data loss prevention (DLP) controls to scan and block sensitive data from being exfiltrated',
-        target: exfilTool,
-      })
-    }
-
-    // Check for code execution
-    const hasCodeExec = pathNodes.some(node =>
-      node.includes('execute') ||
-      node.includes('code_execution')
-    )
-    if (hasCodeExec) {
-      suggestions.push({
-        type: 'access_control',
-        priority: 'high',
-        suggestion: 'Disable code execution capabilities or sandbox the execution environment with strict permissions',
-      })
-    }
-
-    // Long attack chains (> 3 nodes)
-    const agentNodes = pathNodes.filter(n => !n.startsWith('tool:') && !n.startsWith('ingress:'))
-    if (agentNodes.length > 3) {
-      suggestions.push({
-        type: 'architecture',
-        priority: 'medium',
-        suggestion: `Reduce agent chain complexity (currently ${agentNodes.length} agents). Consolidate agents or add validation checkpoints between hops`,
-      })
-    }
-
-    // Check for compromised tools (tool as source)
-    const hasCompromisedTool = pathNodes[0]?.startsWith('tool:')
-    if (hasCompromisedTool) {
-      const toolName = pathNodes[0]?.split(':')[1]
-      suggestions.push({
-        type: 'input_validation',
-        priority: 'high',
-        suggestion: `Validate and sanitize data from external tool "${toolName}" before processing. Consider the tool output as untrusted input`,
-        target: pathNodes[0],
-      })
-    }
-
-    // Add guardrails for prompt injection
-    const firstAgent = agentNodes[0]
-    if (firstAgent && hasExternalIngress) {
-      suggestions.push({
-        type: 'guardrail',
-        priority: 'high',
-        suggestion: `Add prompt injection detection guardrails for agent "${firstAgent}" to filter malicious instructions`,
-        target: firstAgent,
-      })
-    }
-
-    // General: add monitoring
-    suggestions.push({
-      type: 'guardrail',
-      priority: 'low',
-      suggestion: 'Enable real-time monitoring and alerting for suspicious patterns in this attack path',
-    })
-
-    return suggestions
-  }
-
-  const formatTitle = (title: string): string => {
-    // Replace underscores with spaces and convert to proper case
-    return title
-      .replace(/_/g, ' ')
-      .toLowerCase()
-      .replace(/\b\w/g, (char) => char.toUpperCase())
-  }
-
-  const formatPathChain = (pathNodes: string[]) => {
-    return pathNodes.map((node, i) => {
-      let label = node
-      if (node === 'external_input') {
-        label = 'External Input'
-      } else if (node.startsWith('tool:')) {
-        label = node.substring(5)
-      } else if (node.startsWith('ingress:')) {
-        label = node.substring(8)
-      }
-
-      const arrowStyle: CSSProperties = {
-        color: '#6B7280',
-        fontWeight: 'bold',
-      }
-
-      const nodeStyle: CSSProperties = {
-        color: '#60A5FA',
-      }
-
-      return (
-        <span key={i}>
-          {i > 0 && <span style={arrowStyle}> → </span>}
-          <span style={nodeStyle}>{label}</span>
-        </span>
-      )
-    })
-  }
-
-  const findingsListStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  }
-
-  const findingCardStyle = (isSelected: boolean): CSSProperties => ({
-    background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-    border: isSelected ? '2px solid #EF4444' : '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '8px',
-    padding: '16px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    overflow: 'hidden',
-  })
-
-  const findingHeaderStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '12px',
-    flexWrap: 'wrap',
-    gap: '8px',
-  }
-
-  const findingTitleStyle: CSSProperties = {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#F5F5F5',
-    margin: '0 0 12px 0',
-    lineHeight: 1.4,
-    wordBreak: 'break-word',
-    overflowWrap: 'break-word',
-  }
-
-  const pathChainStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '4px',
-    margin: '0 0 12px 0',
-    padding: '10px',
-    background: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontFamily: "'JetBrains Mono', monospace",
-    lineHeight: 1.6,
-  }
-
-  const riskScoreStyle: CSSProperties = {
-    fontSize: '12px',
-    color: '#9CA3AF',
-    margin: '0 0 10px 0',
-  }
-
-  const riskScoreValueStyle: CSSProperties = {
-    color: '#F97316',
-    fontSize: '14px',
-    fontWeight: 600,
-  }
-
-  const findingDescriptionStyle: CSSProperties = {
-    fontSize: '12px',
-    lineHeight: 1.6,
-    color: '#D1D5DB',
-    marginTop: '0',
-    wordBreak: 'break-word',
-    overflowWrap: 'break-word',
-  }
-
-  const emptyStateStyle: CSSProperties = {
-    textAlign: 'center',
-    color: '#6B7280',
-    padding: '32px 16px',
-  }
-
-  const mitigateButtonStyle: CSSProperties = {
-    fontSize: '11px',
-    padding: '4px 10px',
-    background: 'rgba(59, 130, 246, 0.1)',
-    border: '1px solid rgba(59, 130, 246, 0.3)',
-    borderRadius: '4px',
-    color: '#60A5FA',
-    cursor: 'pointer',
-    fontWeight: 600,
-    transition: 'all 0.2s ease',
-  }
-
-  const mitigationSectionStyle: CSSProperties = {
-    marginTop: '12px',
-    padding: '12px',
-    background: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: '6px',
-    borderLeft: '3px solid #60A5FA',
-  }
-
-  const mitigationHeaderStyle: CSSProperties = {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#60A5FA',
-    marginBottom: '10px',
-  }
-
-  const mitigationItemStyle: CSSProperties = {
-    marginBottom: '10px',
-    paddingBottom: '10px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-  }
-
-  const mitigationTypeStyle = (type: string): CSSProperties => {
-    const colors = {
-      guardrail: '#8B5CF6',
-      human_review: '#F59E0B',
-      input_validation: '#10B981',
-      access_control: '#EF4444',
-      architecture: '#6B7280',
-    }
-    return {
-      display: 'inline-block',
-      fontSize: '9px',
-      padding: '2px 6px',
-      borderRadius: '3px',
-      background: colors[type as keyof typeof colors] || '#6B7280',
-      color: '#fff',
-      fontWeight: 600,
-      textTransform: 'uppercase',
-      marginRight: '8px',
-    }
-  }
-
-  const mitigationPriorityStyle = (priority: string): CSSProperties => {
-    const colors = {
-      high: '#EF4444',
-      medium: '#F59E0B',
-      low: '#6B7280',
-    }
-    return {
-      display: 'inline-block',
-      fontSize: '9px',
-      padding: '2px 6px',
-      borderRadius: '3px',
-      background: colors[priority as keyof typeof colors] || '#6B7280',
-      color: '#fff',
-      fontWeight: 600,
-      textTransform: 'uppercase',
-    }
-  }
-
-  const mitigationTextStyle: CSSProperties = {
-    fontSize: '12px',
-    lineHeight: 1.5,
-    color: '#D1D5DB',
-    marginTop: '6px',
-  }
-
-  const mitigationTargetStyle: CSSProperties = {
-    fontSize: '10px',
-    color: '#9CA3AF',
-    fontFamily: "'JetBrains Mono', monospace",
-    marginTop: '4px',
-  }
-
   return (
-    <div className="detail-panel open">
-      <div className="detail-panel-header">
-        <h3>Attack Surface Findings</h3>
-        <button className="detail-panel-close" onClick={onClose} aria-label="Close panel">
-          &times;
-        </button>
-      </div>
-
-      {paths.length === 0 ? (
-        <div style={emptyStateStyle}>No attack paths detected</div>
-      ) : (
-        <div style={findingsListStyle}>
-          {paths.map((path) => {
-            const isSelected = selectedPath?.path_id === path.path_id
-            return (
-            <div
-              key={path.path_id}
-              style={findingCardStyle(isSelected)}
-              onClick={() => onPathSelect(isSelected ? null : path)}
-            >
-              <div style={findingHeaderStyle}>
-                <span
-                  style={{
-                    backgroundColor: severityColor(path.severity),
-                    color: '#fff',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                  }}
-                >
-                  {path.severity}
-                </span>
-              </div>
-
-              <h4 style={findingTitleStyle}>{formatTitle(path.title)}</h4>
-
-              <div style={pathChainStyle}>
-                {formatPathChain(path.path_nodes)}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                <div style={riskScoreStyle}>
-                  Risk Score: <strong style={riskScoreValueStyle}>{path.risk_score.toFixed(1)}</strong>
-                </div>
-                <button
-                  style={mitigateButtonStyle}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setExpandedMitigation(expandedMitigation === path.path_id ? null : path.path_id)
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.target as HTMLButtonElement).style.background = 'rgba(59, 130, 246, 0.2)'
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.target as HTMLButtonElement).style.background = 'rgba(59, 130, 246, 0.1)'
-                  }}
-                >
-                  {expandedMitigation === path.path_id ? 'Hide' : 'Mitigate'}
-                </button>
-              </div>
-
-              <p style={findingDescriptionStyle}>{path.description}</p>
-
-              {expandedMitigation === path.path_id && (
-                <div style={mitigationSectionStyle}>
-                  <div style={mitigationHeaderStyle}>Mitigation Suggestions</div>
-                  {generateMitigations(path).map((mitigation, idx) => (
-                    <div key={idx} style={mitigationItemStyle}>
-                      <div>
-                        <span style={mitigationTypeStyle(mitigation.type)}>
-                          {mitigation.type.replace('_', ' ')}
-                        </span>
-                        <span style={mitigationPriorityStyle(mitigation.priority)}>
-                          {mitigation.priority}
-                        </span>
-                      </div>
-                      <div style={mitigationTextStyle}>{mitigation.suggestion}</div>
-                      {mitigation.target && (
-                        <div style={mitigationTargetStyle}>Target: {mitigation.target}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            )
-          })}
+    <Drawer
+      open
+      onClose={onClose}
+      ariaLabel="Attack surface findings"
+      tone={selectedPath ? severityTone(selectedPath.severity) : 'neutral'}
+      widthPx={520}
+    >
+      <header className="drawer-header">
+        <h3 className="drawer-title" style={{ margin: 0, fontSize: 16 }}>Attack Surface Findings</h3>
+        <div style={{ marginLeft: 'auto' }}>
+          <DrawerClose onClose={onClose} />
         </div>
-      )}
-    </div>
+      </header>
+
+      <div className="drawer-body">
+        {paths.length === 0 ? (
+          <p className="panel-muted" style={{ textAlign: 'center', padding: '24px 0' }}>
+            No attack paths detected
+          </p>
+        ) : (
+          <div className="attack-drawer-list">
+            {paths.map((path) => {
+              const isSelected = selectedPath?.path_id === path.path_id
+              const tone = severityTone(path.severity)
+              const showMit = expandedMitigation === path.path_id
+              return (
+                <div
+                  key={path.path_id}
+                  className={`attack-card${isSelected ? ' is-selected' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  onClick={() => onPathSelect(isSelected ? null : path)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onPathSelect(isSelected ? null : path)
+                    }
+                  }}
+                >
+                  <div className="attack-card-top">
+                    <span className={`attack-severity-pill pill-${tone}`}>
+                      {path.severity}
+                    </span>
+                  </div>
+
+                  <h4 className="attack-card-title">{formatTitle(path.title)}</h4>
+
+                  <div className="attack-card-chain">
+                    <PathChain nodes={path.path_nodes} />
+                  </div>
+
+                  <div className="attack-card-metarow">
+                    <div className="attack-card-risk">
+                      Risk Score: <strong>{path.risk_score.toFixed(1)}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="attack-mitigate-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setExpandedMitigation(showMit ? null : path.path_id)
+                      }}
+                    >
+                      {showMit ? 'Hide' : 'Mitigate'}
+                    </button>
+                  </div>
+
+                  <p className="attack-card-desc">{path.description}</p>
+
+                  {showMit && (
+                    <div className="attack-mitigations">
+                      <div className="attack-mitigations-h">Mitigation Suggestions</div>
+                      {generateMitigations(path).map((m, idx) => (
+                        <div key={idx} className="attack-mitigation-item">
+                          <div>
+                            <span className="attack-mit-type">{m.type.replace('_', ' ')}</span>
+                            <span className={`attack-mit-pri pri-${m.priority}`}>{m.priority}</span>
+                          </div>
+                          <div className="attack-mit-text">{m.suggestion}</div>
+                          {m.target && <div className="attack-mit-target">Target: {m.target}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </Drawer>
   )
 }

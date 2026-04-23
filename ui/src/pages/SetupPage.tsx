@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { validateWorkspacePath, triggerScan, pollScanStatus, fetchLatestScan, ScanDetail } from '../api/scan'
-import ScanFindingsPanel from '../components/ScanFindingsPanel'
+import FindingsSection from '../components/findings/FindingsSection'
 
 type FlowState = 'path_entry' | 'validating' | 'scanning' | 'results'
 
 export default function SetupPage() {
-  useEffect(() => { document.title = 'Setup \u2014 TraceCtrl' }, [])
+  useEffect(() => { document.title = 'Setup — TraceCtrl' }, [])
 
   const [state, setState] = useState<FlowState>('path_entry')
   const [path, setPath] = useState('')
@@ -16,7 +16,6 @@ export default function SetupPage() {
   const [scanData, setScanData] = useState<ScanDetail | null>(null)
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Elapsed timer while scanning
   useEffect(() => {
     if (state === 'scanning') {
       setElapsed(0)
@@ -27,7 +26,6 @@ export default function SetupPage() {
     return () => { if (elapsedRef.current) clearInterval(elapsedRef.current) }
   }, [state])
 
-  // Poll scan status every 2s when scanning
   useEffect(() => {
     if (state !== 'scanning' || !activeScanId) return
     const poll = setInterval(async () => {
@@ -115,7 +113,7 @@ export default function SetupPage() {
                 onClick={handleScanNow}
                 disabled={state === 'validating'}
               >
-                {state === 'validating' ? 'Validating\u2026' : 'Scan Now'}
+                {state === 'validating' ? 'Validating…' : 'Scan Now'}
               </button>
             </div>
             {pathError && (
@@ -139,12 +137,14 @@ export default function SetupPage() {
 
       {state === 'results' && scanData && (
         <>
-          {scanError && <div className="error-banner">{scanError}</div>}
-          <ScanFindingsPanel
+          {scanError && <div className="error-banner" role="alert">{scanError}</div>}
+          <FindingsSection
             results={scanData.results}
             topology={scanData.topology ?? null}
             workspacePath={path}
             onRescan={handleRescan}
+            onSelectNode={() => {}}
+            onScrollToTopology={() => {}}
             onFixApplied={() => handleRescan()}
           />
         </>
