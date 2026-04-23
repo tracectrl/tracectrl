@@ -3,10 +3,10 @@ import { ScanResult, ScanTopology, applyFixes } from '../../api/scan'
 import { SelectedNode } from '../ScanTopologyCanvas'
 import { AUTO_FIXABLE_IDS } from '../../data/fixSnippets'
 import { categorize, TopCategory, TOP_ORDER } from '../../data/checkCategories'
-import { buildAggregateBrief } from '../../utils/agentBrief'
 import FindingsTabs, { TabStat } from './FindingsTabs'
 import FindingCard from './FindingCard'
 import FindingDrawer from './FindingDrawer'
+import AgentBriefDrawer from './AgentBriefDrawer'
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 4, high: 3, medium: 2, low: 1, pass: 0,
@@ -66,7 +66,7 @@ export default function FindingsSection({
   const [fixingId, setFixingId] = useState<string | null>(null)
   const [fixingAll, setFixingAll] = useState(false)
   const [fixError, setFixError] = useState<string | null>(null)
-  const [briefCopied, setBriefCopied] = useState(false)
+  const [briefOpen, setBriefOpen] = useState(false)
 
   const sortResults = useCallback((a: ScanResult, b: ScanResult) => {
     const aOrd = SEVERITY_ORDER[a.severity.toLowerCase()] ?? 0
@@ -230,17 +230,9 @@ export default function FindingsSection({
     [workspacePath, fixedIds, onFixApplied]
   )
 
-  const handleCopyBrief = useCallback(async () => {
-    if (manualFailing.length === 0) return
-    const md = buildAggregateBrief(manualFailing, { workspacePath })
-    try {
-      await navigator.clipboard.writeText(md)
-      setBriefCopied(true)
-      window.setTimeout(() => setBriefCopied(false), 2200)
-    } catch {
-      // no-op; clipboard may be unavailable in non-https contexts
-    }
-  }, [manualFailing, workspacePath])
+  const openBrief = useCallback(() => {
+    if (manualFailing.length > 0) setBriefOpen(true)
+  }, [manualFailing])
 
   const showEmpty = grouped.length === 0
 
@@ -280,10 +272,10 @@ export default function FindingsSection({
           {manualFailing.length > 0 && (
             <button
               className="btn btn-ghost btn-sm agent-brief-btn"
-              onClick={handleCopyBrief}
-              title="Copy a markdown prompt for a coding agent to fix the non-auto-fixable findings"
+              onClick={openBrief}
+              title="Preview the markdown prompt for a coding agent, then copy"
             >
-              {briefCopied ? '✓ Copied' : `Copy Agent Brief (${manualFailing.length})`}
+              Agent Brief ({manualFailing.length})
             </button>
           )}
           <button className="btn btn-ghost btn-sm" onClick={onRescan}>Rescan</button>
@@ -346,11 +338,17 @@ export default function FindingsSection({
         fixed={openResult ? fixedIds.has(openResult.check_id) : false}
         fixing={!!openResult && fixingId === openResult.check_id}
         open={!!openResult}
-        workspacePath={workspacePath}
         onClose={closeDrawer}
         onFix={id => handleFix([id])}
         onPrev={openPrev}
         onNext={openNext}
+      />
+
+      <AgentBriefDrawer
+        open={briefOpen}
+        onClose={() => setBriefOpen(false)}
+        findings={manualFailing}
+        workspacePath={workspacePath}
       />
     </section>
   )

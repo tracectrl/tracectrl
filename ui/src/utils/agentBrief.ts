@@ -1,5 +1,6 @@
 import { ScanResult } from '../api/scan'
 import { categorize } from '../data/checkCategories'
+import { AGENT_BRIEFS, AgentBrief } from '../data/agentBriefs'
 
 const DOCS_ROOT = 'https://docs.openclaw.ai'
 
@@ -7,79 +8,75 @@ interface BuildOptions {
   workspacePath?: string
 }
 
-/**
- * Produce a markdown prompt for a coding agent to fix a single finding.
- * Self-contained — can be pasted into Claude / Cursor / Aider.
- */
-export function buildSingleBrief(r: ScanResult, opts: BuildOptions = {}): string {
-  const cat = categorize(r.check_id)
-  const lines = [
-    `# Fix TraceCtrl finding ${r.check_id}`,
-    '',
-    `**Severity:** ${r.severity.toUpperCase()}  `,
-    `**Category:** ${cat.top} · ${cat.sub}  `,
-    `**Title:** ${r.title}`,
-    '',
-    '## Evidence',
-    r.finding || '(no evidence captured)',
-    '',
-    '## Fix',
-    r.remediation || '(no remediation text supplied; inspect the relevant openclaw.json and apply a secure default)',
-    '',
-  ]
-  if (r.config_path) {
-    lines.push('## Source', `\`${r.config_path}\``, '')
-  }
-  if (opts.workspacePath) {
-    lines.push('## Workspace', `\`${opts.workspacePath}\``, '')
-  }
-  lines.push(
-    '## References',
-    `- OpenClaw configuration docs: ${DOCS_ROOT}`,
-    '',
-    '## Task',
-    `Please inspect the OpenClaw workspace, apply the fix above, and verify with \`tracectrl scan\`. Do not introduce new findings. Confirm the resulting config passes ${r.check_id}.`,
-  )
-  return lines.join('\n')
+function briefFor(checkId: string): AgentBrief | null {
+  return AGENT_BRIEFS[checkId] ?? null
 }
 
 /**
- * Produce a single aggregated markdown prompt covering all non-auto-fixable
- * failing findings. Intended for the page-level "Copy Agent Brief" button.
+ * Aggregate markdown for ALL non-auto-fixable findings passed in.
+ * Format: short header explaining the task, then per-finding blocks
+ * with problem / location / docs link / optional hint / raw evidence.
+ * The agent is expected to visit each docs link and apply the fix.
  */
 export function buildAggregateBrief(items: ScanResult[], opts: BuildOptions = {}): string {
   if (items.length === 0) return ''
 
-  const header = [
+  const header: string[] = [
     '# TraceCtrl — manual security fixes',
     '',
-    `You are helping fix **${items.length}** TraceCtrl security finding${items.length === 1 ? '' : 's'} that the auto-fixer cannot resolve. Each task below is self-contained.`,
+    `You are helping fix **${items.length}** OpenClaw security finding${items.length === 1 ? '' : 's'} that the TraceCtrl auto-fixer cannot resolve.`,
     '',
-    opts.workspacePath ? `**Workspace:** \`${opts.workspacePath}\`` : '',
-    `**Reference:** ${DOCS_ROOT}`,
+    'For each item below:',
+    '1. Read the linked docs page to understand the configuration.',
+    '2. Open the indicated file / JSON path.',
+    '3. Apply the minimal fix that resolves the finding without relaxing other controls.',
+    '4. After each change, run `tracectrl scan` and confirm no new findings were introduced.',
     '',
-    '## Task list',
-    '',
-  ].filter(Boolean)
+  ]
+  if (opts.workspacePath) header.push(`**Workspace:** \`${opts.workspacePath}\``, '')
+  header.push(`**Docs root:** ${DOCS_ROOT}`, '', '---', '')
 
   const tasks = items.map((r, i) => {
     const cat = categorize(r.check_id)
-    const parts = [
-      `### ${i + 1}. ${r.check_id} — ${r.title}`,
+    const hand = briefFor(r.check_id)
+    const lines: string[] = [
+      `## ${i + 1}. ${r.check_id} — ${r.title}`,
       `_${r.severity.toUpperCase()} · ${cat.top} · ${cat.sub}_`,
       '',
     ]
-    if (r.finding) { parts.push('**Evidence:** ' + r.finding, '') }
-    parts.push('**Fix:** ' + (r.remediation || '(inspect config and apply a secure default)'))
-    if (r.config_path) { parts.push('', '**Source:** `' + r.config_path + '`') }
-    return parts.join('\n')
+
+    if (hand) {
+      lines.push(`**Problem:** ${hand.problem}`)
+      lines.push(`**Location:** ${hand.location}`)
+      lines.push(`**Docs:** ${hand.docsUrl}`)
+      if (hand.hint) lines.push(`**Hint:** ${hand.hint}`)
+    } else {
+      // Fallback: use scanner-supplied remediation + generic docs root.
+      if (r.finding) lines.push(`**Problem:** ${r.finding}`)
+      if (r.remediation) lines.push(`**Hint:** ${r.remediation}`)
+      lines.push(`**Docs:** ${DOCS_ROOT}`)
+    }
+
+    if (r.finding && hand) {
+      lines.push('', `> Scanner evidence: ${r.finding}`)
+    }
+    if (r.config_path) lines.push('', `**Source:** \`${r.config_path}\``)
+    return lines.join('\n')
   })
 
   const footer = [
     '',
+    '---',
+    '',
     '## Verification',
-    'After each fix, run `tracectrl scan` and confirm no new findings were introduced. Report which checks now pass.',
+    'Once all items are addressed, run `tracectrl scan` and report which findings now pass.',
   ]
 
   return [...header, ...tasks, ...footer].join('\n')
+}
+
+// Still exported for parity — per-finding brief reuses the aggregate formatter
+// with a one-item list so single and bulk output stay structurally identical.
+export function buildSingleBrief(r: ScanResult, opts: BuildOptions = {}): string {
+  return buildAggregateBrief([r], opts)
 }
