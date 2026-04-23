@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import SpanTree from '../components/SpanTree'
 import SpanTimeline from '../components/SpanTimeline'
 import SpanDetailPanel from '../components/SpanDetailPanel'
+import ErrorBanner from '../components/shared/ErrorBanner'
 import { fetchTraceSpans, SpanDetail, formatDuration } from '../api/sessions'
 
 export default function TraceDetail() {
@@ -63,7 +64,7 @@ export default function TraceDetail() {
         </p>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <ErrorBanner error={error} />}
 
       {loading ? (
         <div className="table-container">

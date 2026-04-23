@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { fetchAgentList, fetchAgentTools, AgentSummary, AgentTool } from '../api/agents'
+import SortableTh from '../components/shared/SortableTh'
+import EmptyState from '../components/shared/EmptyState'
+import ErrorBanner from '../components/shared/ErrorBanner'
 import { useProject } from '../context/ProjectContext'
 
 type SortKey = 'name' | 'observation_count' | 'last_seen' | 'tools_count'
@@ -17,13 +20,16 @@ export default function Agents() {
 
   useEffect(() => { document.title = 'Agents — TraceCtrl' }, [])
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null)
     setLoading(true)
     fetchAgentList(selectedProject)
       .then(setAgents)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [selectedProject])
+
+  useEffect(() => { load() }, [load])
 
   const sorted = useMemo(() => {
     const copy = [...agents]
@@ -43,11 +49,6 @@ export default function Agents() {
     else { setSortKey(key); setSortDir('desc') }
   }
 
-  const sortIndicator = (key: SortKey) => {
-    if (sortKey !== key) return ''
-    return sortDir === 'asc' ? ' \u2191' : ' \u2193'
-  }
-
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     return d.toLocaleString(undefined, {
@@ -56,7 +57,7 @@ export default function Agents() {
     })
   }
 
-  const handleRowClick = useCallback((agentId: string) => {
+  const handleRowActivate = useCallback((agentId: string) => {
     if (expandedAgentId === agentId) {
       setExpandedAgentId(null)
       setExpandedTools([])
@@ -76,20 +77,11 @@ export default function Agents() {
         <div className="section-tag">Monitor</div>
         <h2>Agents</h2>
         <p className="page-meta" aria-live="polite">
-          {loading
-            ? 'Loading agents...'
-            : `${agents.length} agents`}
+          {loading ? 'Loading agents...' : `${agents.length} agents`}
         </p>
       </div>
 
-      {error && (
-        <div className="error-banner">
-          {error}
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); setLoading(true); fetchAgentList(selectedProject).then(setAgents).catch(err => setError(err.message)).finally(() => setLoading(false)); }}>
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ErrorBanner error={error} onRetry={load} />}
 
       {loading ? (
         <div className="table-container">
@@ -98,18 +90,18 @@ export default function Agents() {
           ))}
         </div>
       ) : agents.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
+        <EmptyState
+          title="No Agents Discovered"
+          hint="Agents will appear here once your instrumented applications start sending traces via OpenTelemetry."
+          icon={
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-          </div>
-          <h3>No Agents Discovered</h3>
-          <p>Agents will appear here once your instrumented applications start sending traces via OpenTelemetry.</p>
-        </div>
+          }
+        />
       ) : (
         <div className="sessions-list">
           <div className="table-container">
@@ -117,37 +109,33 @@ export default function Agents() {
               <thead>
                 <tr>
                   <th style={{ width: 28 }} />
-                  <th onClick={() => toggleSort('name')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Name{sortIndicator('name')}
-                  </th>
+                  <SortableTh active={sortKey === 'name'} direction={sortDir} onToggle={() => toggleSort('name')}>Name</SortableTh>
                   <th>Framework</th>
                   <th>Model</th>
-                  <th onClick={() => toggleSort('tools_count')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'tools_count' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Tools{sortIndicator('tools_count')}
-                  </th>
-                  <th onClick={() => toggleSort('observation_count')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'observation_count' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Observations{sortIndicator('observation_count')}
-                  </th>
+                  <SortableTh active={sortKey === 'tools_count'} direction={sortDir} onToggle={() => toggleSort('tools_count')}>Tools</SortableTh>
+                  <SortableTh active={sortKey === 'observation_count'} direction={sortDir} onToggle={() => toggleSort('observation_count')}>Observations</SortableTh>
                   <th>Maturity</th>
-                  <th onClick={() => toggleSort('last_seen')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'last_seen' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                    Last Seen{sortIndicator('last_seen')}
-                  </th>
+                  <SortableTh active={sortKey === 'last_seen'} direction={sortDir} onToggle={() => toggleSort('last_seen')}>Last Seen</SortableTh>
                 </tr>
               </thead>
               <tbody>
                 {sorted.map(agent => {
                   const isExpanded = expandedAgentId === agent.agent_id
-
                   return (
                     <React.Fragment key={agent.agent_id}>
                       <tr
-                        onClick={() => handleRowClick(agent.agent_id)}
+                        onClick={() => handleRowActivate(agent.agent_id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRowActivate(agent.agent_id) }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-expanded={isExpanded}
                         style={{ cursor: 'pointer' }}
                         className={isExpanded ? 'selected' : ''}
-                        aria-expanded={isExpanded}
                       >
                         <td style={{ width: 28, textAlign: 'center', color: 'var(--gray-500)', fontSize: 10 }}>
-                          {isExpanded ? '\u25BC' : '\u25B6'}
+                          {isExpanded ? '▼' : '▶'}
                         </td>
                         <td className="primary">{agent.name || agent.agent_id}</td>
                         <td><span className="badge">{agent.framework}</span></td>

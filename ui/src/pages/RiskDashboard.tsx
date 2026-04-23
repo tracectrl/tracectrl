@@ -1,6 +1,9 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useProject } from '../context/ProjectContext'
 import { fetchRiskSummary, fetchAgentRisks, RiskSummary, AgentRisk, severityBadgeClass, severityColor } from '../api/risk'
+import SortableTh from '../components/shared/SortableTh'
+import EmptyState from '../components/shared/EmptyState'
+import ErrorBanner from '../components/shared/ErrorBanner'
 
 type SortKey = 'agent_id' | 'risk_score' | 'severity' | 'path_count'
 
@@ -17,13 +20,16 @@ export default function RiskDashboard() {
 
   useEffect(() => { document.title = 'Risk Dashboard — TraceCtrl' }, [])
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null)
     setLoading(true)
     Promise.all([fetchRiskSummary(), fetchAgentRisks(selectedProject)])
       .then(([s, a]) => { setSummary(s); setAgentRisks(a) })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [selectedProject])
+
+  useEffect(() => { load() }, [load])
 
   const sorted = useMemo(() => {
     const copy = [...agentRisks]
@@ -43,11 +49,6 @@ export default function RiskDashboard() {
     else { setSortKey(key); setSortDir('desc') }
   }
 
-  const sortIndicator = (key: SortKey) => {
-    if (sortKey !== key) return ''
-    return sortDir === 'asc' ? ' \u2191' : ' \u2193'
-  }
-
   return (
     <div>
       <div className="page-header">
@@ -57,23 +58,15 @@ export default function RiskDashboard() {
           {loading
             ? 'Calculating risk...'
             : summary
-              ? `System score ${summary.risk_score} \u2014 ${summary.severity}`
+              ? `System score ${summary.risk_score} — ${summary.severity}`
               : 'No risk data available'}
         </p>
       </div>
 
-      {error && (
-        <div className="error-banner">
-          {error}
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); setLoading(true); Promise.all([fetchRiskSummary(), fetchAgentRisks(selectedProject)]).then(([s, a]) => { setSummary(s); setAgentRisks(a) }).catch(err => setError(err.message)).finally(() => setLoading(false)); }}>
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ErrorBanner error={error} onRetry={load} />}
 
       {loading ? (
         <>
-          {/* Skeleton for hero + cards */}
           <div className="loading-skeleton" style={{ height: 80, marginBottom: 16 }} />
           <div className="card-grid cols-4" style={{ marginBottom: 24 }}>
             {[...Array(4)].map((_, i) => (
@@ -87,21 +80,20 @@ export default function RiskDashboard() {
           </div>
         </>
       ) : !summary && agentRisks.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
+        <EmptyState
+          title="No Risk Data Yet"
+          hint="Risk scores will appear once attack path analysis has been run against your agent topology."
+          icon={
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
-          </div>
-          <h3>No Risk Data Yet</h3>
-          <p>Risk scores will appear once attack path analysis has been run against your agent topology.</p>
-        </div>
+          }
+        />
       ) : (
         <>
-          {/* System risk hero */}
           {summary && (
-            <div className="stat-card" style={{ textAlign: 'center', marginBottom: 'var(--space-4)', padding: 'var(--space-4)' }}>
-              <div className="stat-value" style={{ fontSize: 48, color: severityColor(summary.severity) }}>
+            <div className="stat-card risk-hero" style={{ textAlign: 'center', marginBottom: 'var(--space-4)', padding: 'var(--space-4)' }}>
+              <div className="stat-value stat-value-hero" style={{ color: severityColor(summary.severity) }}>
                 {summary.risk_score}
               </div>
               <div className="stat-label" style={{ color: severityColor(summary.severity) }}>
@@ -110,7 +102,6 @@ export default function RiskDashboard() {
             </div>
           )}
 
-          {/* 4-stat card grid */}
           {summary && (
             <div className="card-grid cols-4" style={{ marginBottom: 'var(--space-6)' }}>
               <div className="stat-card">
@@ -134,25 +125,16 @@ export default function RiskDashboard() {
             </div>
           )}
 
-          {/* Per-agent risk table */}
           {agentRisks.length > 0 && (
             <div className="sessions-list">
               <div className="table-container">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th onClick={() => toggleSort('agent_id')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'agent_id' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                        Agent ID{sortIndicator('agent_id')}
-                      </th>
-                      <th onClick={() => toggleSort('risk_score')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'risk_score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                        Risk Score{sortIndicator('risk_score')}
-                      </th>
-                      <th onClick={() => toggleSort('severity')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'severity' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                        Severity{sortIndicator('severity')}
-                      </th>
-                      <th onClick={() => toggleSort('path_count')} style={{ cursor: 'pointer' }} aria-sort={sortKey === 'path_count' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                        Paths{sortIndicator('path_count')}
-                      </th>
+                      <SortableTh active={sortKey === 'agent_id'} direction={sortDir} onToggle={() => toggleSort('agent_id')}>Agent ID</SortableTh>
+                      <SortableTh active={sortKey === 'risk_score'} direction={sortDir} onToggle={() => toggleSort('risk_score')}>Risk Score</SortableTh>
+                      <SortableTh active={sortKey === 'severity'} direction={sortDir} onToggle={() => toggleSort('severity')}>Severity</SortableTh>
+                      <SortableTh active={sortKey === 'path_count'} direction={sortDir} onToggle={() => toggleSort('path_count')}>Paths</SortableTh>
                       <th>Top Rule</th>
                     </tr>
                   </thead>

@@ -49,10 +49,11 @@ const NODE_TYPE_STYLES: Record<string, NodeStyle> = {
 }
 const DEFAULT_STYLE: NodeStyle = { shape: 'ellipse', w: 36, h: 36, bw: 2 }
 
+// Risk border colors mirror globals.css --risk-* tokens (can't read CSS vars from cytoscape styles)
 const RISK_BORDER: Record<string, { color: string; width: number }> = {
-  critical: { color: '#FF3B3B', width: 4 },
-  high:     { color: '#FF5722', width: 3 },
-  medium:   { color: '#FFC107', width: 3 },
+  critical: { color: '#FF4D4D', width: 4 },
+  high:     { color: '#FF6B35', width: 3 },
+  medium:   { color: '#FFBB00', width: 3 },
 }
 
 const LEGEND: { label: string; type: string }[] = [
@@ -335,19 +336,14 @@ export default function ScanTopologyCanvas({ topology, nodeRiskMap, onNodeClick,
   return (
     <>
       <div ref={containerRef} className="scan-topology-canvas" />
-      <div style={{
-        display: 'flex', gap: 16, padding: '8px 18px', flexWrap: 'wrap',
-        fontSize: 10.5, color: '#4A6A80', alignItems: 'center',
-        fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em',
-        background: '#03060E', borderTop: '1px solid #0E1F2C',
-      }}>
+      <div className="scan-topology-legend">
         {LEGEND.map(l => (
-          <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span key={l.label} className="legend-item">
             <ShapeGlyph type={l.type} color={NODE_COLORS[l.type]} />
             <span style={{ color: NODE_COLORS[l.type], opacity: 0.85 }}>{l.label}</span>
           </span>
         ))}
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center' }}>
+        <span className="legend-risk-group">
           {Object.entries(RISK_BORDER).map(([sev, r]) => (
             <span key={sev} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{

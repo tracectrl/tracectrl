@@ -77,6 +77,14 @@ def ensure_schema() -> None:
         f"""CREATE TABLE IF NOT EXISTS {db}.scan_topology (
             scan_id String, created_at DateTime, topology_json String
         ) ENGINE = ReplacingMergeTree(created_at) ORDER BY scan_id""",
+        f"""CREATE TABLE IF NOT EXISTS {db}.scan_runs (
+  scan_id        String,
+  scanned_at     DateTime64(3, 'UTC'),
+  workspace_path String,
+  config_hash    String DEFAULT '',
+  profile        String DEFAULT 'L1'
+) ENGINE = ReplacingMergeTree()
+ORDER BY (scan_id)""",
     ]
     client = get_client()
     for stmt in stmts:

@@ -6,6 +6,7 @@ import TraceDetail from './pages/TraceDetail'
 import RiskDashboard from './pages/RiskDashboard'
 import AttackPaths from './pages/AttackPaths'
 import ScanReport from './pages/ScanReport'
+import SetupPage from './pages/SetupPage'
 import { ProjectProvider, useProject } from './context/ProjectContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 
@@ -18,6 +19,7 @@ function Sidebar() {
     { href: '/topology', label: 'Topology' },
     { href: '/sessions', label: 'Sessions' },
     { href: '/agents', label: 'Agents' },
+    { href: '/setup', label: 'Setup & Scan' },
     { href: '/risk', label: 'Risk Dashboard' },
     { href: '/attacks', label: 'Attack Paths' },
     { href: '/scan', label: 'Scan Report' },
@@ -26,7 +28,16 @@ function Sidebar() {
   return (
     <nav className="sidebar">
       <div className="sidebar-logo">
-        <h1><span className="logo-trace">trace</span><span className="logo-ctrl">ctrl</span></h1>
+        <img
+          src="/tracectrl-logo-dark.png"
+          alt="TraceCtrl"
+          className="sidebar-logo-img sidebar-logo-img--dark"
+        />
+        <img
+          src="/tracectrl-logo-light.png"
+          alt="TraceCtrl"
+          className="sidebar-logo-img sidebar-logo-img--light"
+        />
         <div className="subtitle">Security Observability</div>
       </div>
 
@@ -95,6 +106,7 @@ function App() {
               <Route path="/agents" element={<Agents />} />
               <Route path="/risk" element={<RiskDashboard />} />
               <Route path="/attacks" element={<AttackPaths />} />
+              <Route path="/setup" element={<SetupPage />} />
               <Route path="/scan" element={<ScanReport />} />
             </Routes>
           </main>

@@ -3,6 +3,8 @@ import GraphCanvas from '../components/GraphCanvas'
 import SidebarPanel from '../components/SidebarPanel'
 import PhaseReplaySlider from '../components/PhaseReplaySlider'
 import AttackFindingsPanel from '../components/AttackFindingsPanel'
+import EmptyState from '../components/shared/EmptyState'
+import ErrorBanner from '../components/shared/ErrorBanner'
 import { fetchTopologyGraph, TopologyGraph, TopologyNode, fetchAttackPaths, fetchAttackOverlay, AttackPath, AttackOverlay } from '../api/client'
 import { fetchLatestSpans, SpanDetail } from '../api/sessions'
 import { fetchAgentRisks, AgentRisk } from '../api/risk'
@@ -17,7 +19,7 @@ export default function TopologyGraphPage() {
   const [loading, setLoading] = useState(true)
   const [latestSpans, setLatestSpans] = useState<SpanDetail[]>([])
   const [showPhases, setShowPhases] = useState(false)
-  const [showAttackerView, setShowAttackerView] = useState(false)
+  const [perspective, setPerspective] = useState<'developer' | 'attacker'>('developer')
   const [agentRisks, setAgentRisks] = useState<AgentRisk[]>([])
   const [replayNs, setReplayNs] = useState<number | null>(null)
   const [attackMode, setAttackMode] = useState(false)
@@ -27,18 +29,19 @@ export default function TopologyGraphPage() {
 
   useEffect(() => { document.title = 'Topology — TraceCtrl' }, [])
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null)
     setLoading(true)
     fetchTopologyGraph(selectedProject)
       .then(setGraph)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-
     fetchLatestSpans(selectedProject).then(setLatestSpans).catch(() => {})
     fetchAgentRisks(selectedProject).then(setAgentRisks).catch(() => {})
   }, [selectedProject])
 
-  // Fetch attack data when attack mode is toggled on
+  useEffect(() => { load() }, [load])
+
   useEffect(() => {
     if (attackMode) {
       fetchAttackPaths().then(setAttackPaths).catch(() => {})
@@ -87,6 +90,8 @@ export default function TopologyGraphPage() {
   const agentCount = graph?.nodes.filter(n => n.type === 'agent').length ?? 0
   const toolCount = graph?.nodes.filter(n => n.type === 'tool').length ?? 0
 
+  const attackerView = perspective === 'attacker'
+
   return (
     <div>
       <div className="page-header flex justify-between items-center">
@@ -101,58 +106,59 @@ export default function TopologyGraphPage() {
                 : 'No data'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {!loading && graph && latestSpans.length > 0 && (
+        {!loading && graph && (
+          <div className="topo-controls">
+            <div className="segmented" role="group" aria-label="Perspective">
+              <button
+                type="button"
+                className={`segmented-btn${!attackerView ? ' is-active' : ''}`}
+                onClick={() => setPerspective('developer')}
+                aria-pressed={!attackerView}
+              >
+                Developer
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn${attackerView ? ' is-active' : ''}`}
+                onClick={() => setPerspective('attacker')}
+                aria-pressed={attackerView}
+              >
+                Attacker
+              </button>
+            </div>
+
             <button
-              className={`phase-toggle${showPhases ? ' active' : ''}`}
-              onClick={() => setShowPhases(prev => !prev)}
-              aria-pressed={showPhases}
-            >
-              Show Phases
-            </button>
-          )}
-          {!loading && graph && (
-            <button
-              className={`phase-toggle${showAttackerView ? ' active' : ''}`}
-              onClick={() => setShowAttackerView(v => !v)}
-              aria-pressed={showAttackerView}
-            >
-              {showAttackerView ? 'Attacker View' : 'Developer View'}
-            </button>
-          )}
-          {!loading && graph && (
-            <button
+              type="button"
               className={`phase-toggle${attackMode ? ' active' : ''}`}
               onClick={() => setAttackMode(prev => !prev)}
+              aria-pressed={attackMode}
             >
               Attack Surface
             </button>
-          )}
-          {!loading && graph && (
+
+            {latestSpans.length > 0 && (
+              <label className="topo-phase-check">
+                <input
+                  type="checkbox"
+                  checked={showPhases}
+                  onChange={e => setShowPhases(e.target.checked)}
+                />
+                <span>Phases</span>
+              </label>
+            )}
+
             <div className="live-indicator">Live</div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {error && (
-        <div className="error-banner">
-          {error}
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setError(null); fetchTopologyGraph(selectedProject).then(setGraph).catch(err => setError(err.message)); fetchLatestSpans(selectedProject).then(setLatestSpans).catch(() => {}); }}>
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ErrorBanner error={error} onRetry={load} />}
 
       {!loading && graph && graph.nodes.length === 0 && (
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
-            </svg>
-          </div>
-          <h3>No Topology Data</h3>
-          <p>Agent topology will appear here once your instrumented agents start sending traces.</p>
-        </div>
+        <EmptyState
+          title="No Topology Data"
+          hint="Agent topology will appear here once your instrumented agents start sending traces."
+        />
       )}
 
       <GraphCanvas
@@ -161,7 +167,7 @@ export default function TopologyGraphPage() {
         highlightedNodeIds={highlightedNodeIds}
         phaseGroups={phases}
         showPhases={showPhases}
-        attackerView={showAttackerView}
+        attackerView={attackerView}
         agentRisks={agentRisks}
         attackMode={attackMode}
         overlay={overlay}

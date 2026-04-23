@@ -651,33 +651,12 @@ export default function GraphCanvas({
       </div>
       <div ref={containerRef} className="graph-canvas" />
 
-      {/* Toggle button for return edges */}
       {!attackMode && (
         <button
+          type="button"
           onClick={() => setShowReturnEdges(!showReturnEdges)}
-          className="graph-toggle-button"
-          style={{
-            position: 'absolute',
-            top: '16px',
-            right: '16px',
-            padding: '8px 16px',
-            background: showReturnEdges ? '#4A90D9' : 'rgba(255, 255, 255, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '6px',
-            color: '#F5F5F5',
-            fontSize: '12px',
-            fontWeight: 500,
-            fontFamily: "'Poppins', sans-serif",
-            cursor: 'pointer',
-            backdropFilter: 'blur(10px)',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = showReturnEdges ? '#5AA0E9' : 'rgba(255, 255, 255, 0.15)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = showReturnEdges ? '#4A90D9' : 'rgba(255, 255, 255, 0.1)'
-          }}
+          className={`graph-canvas-toolbtn${showReturnEdges ? ' is-active' : ''}`}
+          aria-pressed={showReturnEdges}
         >
           {showReturnEdges ? '✓ ' : ''}Show Data Flow
         </button>
@@ -685,15 +664,15 @@ export default function GraphCanvas({
 
       <div className="graph-legend">
         <div className="graph-legend-item">
-          <span className="graph-legend-dot" style={{ background: '#4A90D9' }} />
+          <span className="graph-legend-dot graph-legend-dot--agent" />
           Agent
         </div>
         <div className="graph-legend-item">
-          <span className="graph-legend-dot" style={{ background: '#22C55E' }} />
+          <span className="graph-legend-dot graph-legend-dot--tool" />
           Tool
         </div>
         <div className="graph-legend-item">
-          <span className="graph-legend-dot" style={{ background: '#F97316', clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' }} />
+          <span className="graph-legend-dot graph-legend-dot--trigger" />
           Trigger
         </div>
         <div className="graph-legend-divider" />
@@ -713,11 +692,11 @@ export default function GraphCanvas({
           <>
             <div className="graph-legend-divider" />
             <div className="graph-legend-item">
-              <span className="graph-legend-dot" style={{ background: 'rgba(64, 112, 108, 0.4)', border: '1px solid #8BC4BF' }} />
+              <span className="graph-legend-dot graph-legend-dot--phase" />
               Phase
             </div>
             <div className="graph-legend-item">
-              <span className="graph-legend-line" style={{ background: 'repeating-linear-gradient(to right, #8BC4BF 0px, #8BC4BF 5px, transparent 5px, transparent 8px)' }} />
+              <span className="graph-legend-line graph-legend-line--then" />
               then
             </div>
           </>
