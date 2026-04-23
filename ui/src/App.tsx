@@ -28,7 +28,16 @@ function Sidebar() {
   return (
     <nav className="sidebar">
       <div className="sidebar-logo">
-        <h1><span className="logo-trace">trace</span><span className="logo-ctrl">ctrl</span></h1>
+        <img
+          src="/tracectrl-logo-dark.png"
+          alt="TraceCtrl"
+          className="sidebar-logo-img sidebar-logo-img--dark"
+        />
+        <img
+          src="/tracectrl-logo-light.png"
+          alt="TraceCtrl"
+          className="sidebar-logo-img sidebar-logo-img--light"
+        />
         <div className="subtitle">Security Observability</div>
       </div>
 

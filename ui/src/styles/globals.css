@@ -222,29 +222,25 @@ code, pre {
   margin-bottom: var(--space-5);
 }
 
-.sidebar-logo h1 {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
+/* Full TraceCtrl lockup (emblem + wordmark). Two variants swapped by theme. */
+.sidebar-logo-img {
+  display: block;
+  width: 100%;
+  max-width: 168px;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
 }
-
-.logo-trace {
-  font-family: var(--font-sans);
-  color: var(--white);
-}
-
-.logo-ctrl {
-  font-family: var(--font-mono);
-  color: var(--red);
-  font-weight: 600;
-}
+.sidebar-logo-img--light { display: none; }
+[data-theme="light"] .sidebar-logo-img--dark { display: none; }
+[data-theme="light"] .sidebar-logo-img--light { display: block; }
 
 .sidebar-logo .subtitle {
   font-size: 11px;
   color: var(--gray-500);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  margin-top: 2px;
+  margin-top: var(--space-2);
 }
 
 .sidebar-section-label {
