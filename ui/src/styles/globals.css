@@ -1992,7 +1992,7 @@ h4 {
 
 .scan-topology-canvas {
   width: 100%;
-  height: 480px;
+  height: 700px;
   background-color: #03060E;
   background-image:
     linear-gradient(rgba(0, 180, 255, 0.03) 1px, transparent 1px),
@@ -3023,10 +3023,10 @@ h4 {
    GraphCanvas legend dots (was inline-styled)
    ============================================================ */
 
-.graph-legend-dot--agent   { background: #4A90D9; }
-.graph-legend-dot--tool    { background: #22C55E; }
+.graph-legend-dot--agent   { background: #4D9EFF; }
+.graph-legend-dot--tool    { background: #00E676; }
 .graph-legend-dot--trigger {
-  background: #F97316;
+  background: #00D4FF;
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
 .graph-legend-dot--phase {
@@ -3474,4 +3474,216 @@ h4 {
   font-size: 11px;
   color: var(--gray-500);
   letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   Scan Changes Notification
+   ============================================================ */
+
+.scan-changes-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 360px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--dark-card);
+  border: 1px solid var(--dark-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  z-index: 1000;
+  transform: translateX(400px);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+.scan-changes-notification.visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.scan-changes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--dark-border);
+}
+
+.scan-changes-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--white);
+}
+
+.scan-changes-title svg {
+  color: var(--blue);
+}
+
+.scan-changes-close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--gray-500);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.scan-changes-close:hover {
+  background: var(--gray-800);
+  color: var(--white);
+}
+
+.scan-changes-body {
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scan-change-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scan-change-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gray-500);
+}
+
+.scan-change-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  background: var(--dark);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.scan-change-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.scan-change-item.added .scan-change-icon {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22C55E;
+}
+
+.scan-change-item.removed .scan-change-icon {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+}
+
+.scan-change-item.modified .scan-change-icon {
+  background: rgba(251, 191, 36, 0.15);
+  color: #FBBF24;
+}
+
+.scan-change-label {
+  color: var(--gray-300);
+  font-family: var(--font-mono);
+}
+
+.scan-change-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.scan-change-property {
+  font-size: 12px;
+  color: var(--gray-500);
+  font-family: var(--font-mono);
+}
+
+.scan-change-property .old-value {
+  color: #EF4444;
+  text-decoration: line-through;
+}
+
+.scan-change-property .new-value {
+  color: #22C55E;
+  font-weight: 600;
+}
+
+.scan-change-vuln {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.scan-change-vuln.worse {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #EF4444;
+}
+
+.scan-change-vuln.better {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #22C55E;
+}
+
+.scan-change-vuln-icon {
+  font-size: 16px;
+}
+
+.scan-change-vuln-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  background: var(--dark);
+  border-radius: 6px;
+}
+
+.scan-vuln-delta {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.scan-vuln-delta.critical {
+  background: rgba(255, 77, 77, 0.15);
+  color: #FF4D4D;
+}
+
+.scan-vuln-delta.high {
+  background: rgba(255, 107, 53, 0.15);
+  color: #FF6B35;
+}
+
+.scan-vuln-delta.medium {
+  background: rgba(255, 187, 0, 0.15);
+  color: #FFBB00;
 }

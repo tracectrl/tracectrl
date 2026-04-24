@@ -1,22 +1,14 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
-import { fetchLatestScan, ScanResult, ScanTopology } from '../api/scan'
+import { fetchLatestScan, ScanResult, ScanTopology, triggerScan, pollScanStatus } from '../api/scan'
 import ScanTopologyCanvas, { SelectedNode } from '../components/ScanTopologyCanvas'
 import ScanNodePanel from '../components/ScanNodePanel'
 import FindingsSection from '../components/findings/FindingsSection'
 import EmptyState from '../components/shared/EmptyState'
 import ErrorBanner from '../components/shared/ErrorBanner'
+import ScanChangesNotification from '../components/ScanChangesNotification'
+import { computeScanDiff, ScanDiff } from '../utils/scanDiff'
 
-const SECTION_PREFIX_MAP: Record<string, string[]> = {
-  'Ingress':          ['ingress:'],
-  'Tools':            ['tool:'],
-  'LLM Providers':    ['llm:'],
-  'Lateral Movement': ['subagent_surface:'],
-  'Persistence':      ['scheduler:'],
-  'Plugins':          ['extension:'],
-  'Skills':           ['skill:'],
-}
-const AGENT_SECTIONS = new Set(['Network', 'Guardrails', 'Credentials', 'Filesystem', 'Logging'])
-const SEV_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1 }
+// Risk border colors removed - nodes stay at their type colors
 
 export default function ScanReport() {
   const [results, setResults] = useState<ScanResult[]>([])
@@ -27,7 +19,14 @@ export default function ScanReport() {
   const [highlightNode, setHighlightNode] = useState<SelectedNode | null>(null)
   const [panelNode, setPanelNode] = useState<SelectedNode | null>(null)
   const [showSkills, setShowSkills] = useState(true)
+  const [rescanning, setRescanning] = useState(false)
+  const [scanDiff, setScanDiff] = useState<ScanDiff | null>(null)
+  const [newNodeIds, setNewNodeIds] = useState<Set<string>>(new Set())
   const topologyRef = useRef<HTMLDivElement>(null)
+  const previousScanRef = useRef<{ topology: ScanTopology | null; results: ScanResult[] }>({
+    topology: null,
+    results: [],
+  })
 
   useEffect(() => { document.title = 'Scan Report — TraceCtrl' }, [])
 
@@ -44,32 +43,91 @@ export default function ScanReport() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
-
-  const nodeRiskMap = useMemo(() => {
-    const map = new Map<string, string>()
-    if (!topology) return map
-    for (const r of results) {
-      if (r.passed === 1) continue
-      const sev = r.severity.toLowerCase()
-      const rank = SEV_RANK[sev] ?? 0
-      if (rank === 0) continue
-
-      const prefixes = SECTION_PREFIX_MAP[r.section]
-      const targets: string[] = []
-      if (prefixes) {
-        topology.nodes.filter(n => prefixes.some(p => n.id.startsWith(p))).forEach(n => targets.push(n.id))
-      }
-      if (AGENT_SECTIONS.has(r.section)) {
-        topology.nodes.filter(n => n.type === 'AGENT').forEach(n => targets.push(n.id))
-      }
-      for (const id of targets) {
-        const existing = SEV_RANK[map.get(id) ?? ''] ?? 0
-        if (rank > existing) map.set(id, sev)
-      }
+  const handleRescan = useCallback(async () => {
+    if (!results[0]?.openclaw_path) {
+      setError('No workspace path available')
+      return
     }
-    return map
+
+    // Store scroll position to restore after rescan
+    const scrollPosition = window.scrollY
+
+    // Store previous state before rescanning
+    previousScanRef.current = {
+      topology,
+      results,
+    }
+
+    setRescanning(true)
+    setError(null)
+
+    try {
+      const workspacePath = results[0].openclaw_path
+      console.log('Triggering scan with workspace path:', workspacePath)
+
+      // Trigger new scan
+      const trigger = await triggerScan(workspacePath)
+
+      // Poll for completion
+      let status = await pollScanStatus(trigger.scan_id)
+      while (status.status === 'running') {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        status = await pollScanStatus(trigger.scan_id)
+      }
+
+      if (status.status === 'failed') {
+        throw new Error(status.error || 'Scan failed')
+      }
+
+      // Reload data
+      const newData = await fetchLatestScan()
+      setScanId(newData.scan_id)
+      setResults(newData.results)
+      setTopology(newData.topology ?? null)
+
+      // Compute diff
+      const diff = computeScanDiff(
+        previousScanRef.current.topology,
+        newData.topology ?? null,
+        previousScanRef.current.results,
+        newData.results
+      )
+
+      console.log('=== SCAN DIFF DEBUG ===')
+      console.log('Previous topology nodes:', previousScanRef.current.topology?.nodes.length)
+      console.log('New topology nodes:', newData.topology?.nodes.length)
+      console.log('Previous results:', previousScanRef.current.results.length)
+      console.log('New results:', newData.results.length)
+      console.log('Diff:', diff)
+      console.log('Has changes:', diff.hasChanges)
+
+      if (diff.hasChanges) {
+        setScanDiff(diff)
+
+        // Extract new node IDs for glow effect
+        const newIds = new Set(
+          diff.nodeChanges.filter(c => c.type === 'added').map(c => c.nodeId)
+        )
+        setNewNodeIds(newIds)
+
+        // Clear glow after 3 seconds
+        setTimeout(() => setNewNodeIds(new Set()), 3000)
+      } else {
+        console.warn('No changes detected after rescan!')
+      }
+
+      // Restore scroll position
+      setTimeout(() => window.scrollTo(0, scrollPosition), 0)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Rescan failed')
+      // Restore scroll position even on error
+      setTimeout(() => window.scrollTo(0, scrollPosition), 0)
+    } finally {
+      setRescanning(false)
+    }
   }, [results, topology])
+
+  useEffect(() => { loadData() }, [loadData])
 
   const filteredTopology = useMemo(() => {
     if (!topology) return null
@@ -147,9 +205,9 @@ export default function ScanReport() {
               </div>
               <ScanTopologyCanvas
                 topology={filteredTopology!}
-                nodeRiskMap={nodeRiskMap}
                 onNodeClick={(n) => { setHighlightNode(n ?? null); setPanelNode(n ?? null) }}
                 selectedNodeId={highlightNode?.id ?? null}
+                newNodeIds={newNodeIds}
               />
             </div>
           )}
@@ -158,7 +216,8 @@ export default function ScanReport() {
             results={results}
             topology={topology}
             workspacePath={meta?.openclaw_path ?? ''}
-            onRescan={loadData}
+            onRescan={handleRescan}
+            rescanning={rescanning}
             onSelectNode={setHighlightNode}
             onScrollToTopology={scrollToTopology}
             onFixApplied={() => loadData()}
@@ -166,6 +225,7 @@ export default function ScanReport() {
         </>
       )}
       <ScanNodePanel node={panelNode} onClose={() => setPanelNode(null)} />
+      <ScanChangesNotification diff={scanDiff} onClose={() => setScanDiff(null)} />
     </div>
   )
 }

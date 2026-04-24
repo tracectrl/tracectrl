@@ -173,70 +173,88 @@ export default function GraphCanvas({
             'text-margin-y': -4,
           },
         },
-        // Agent nodes — blue rounded rectangles
+        // Agent nodes — neon blue hexagons
         {
           selector: 'node[nodeType="agent"]',
           style: {
-            'background-color': '#4A90D9',
+            'background-color': '#010D1C',
             'label': 'data(label)',
-            'color': '#F5F5F5',
+            'color': '#A8C0D6',
             'font-size': '12px',
             'font-weight': 600,
             'font-family': "'Poppins', sans-serif",
-            'text-valign': 'center',
+            'text-valign': 'bottom',
             'text-halign': 'center',
             'text-wrap': 'wrap',
             'text-max-width': '120px',
+            'text-margin-y': 9,
+            'text-background-color': '#050810',
+            'text-background-opacity': 0.9,
+            'text-background-padding': '3px',
+            'text-background-shape': 'roundrectangle',
             'width': 'label',
             'height': 50,
             'padding': '16px',
-            'shape': 'round-rectangle',
-            'border-width': 2,
-            'border-color': 'rgba(74, 144, 217, 0.3)',
+            'shape': 'hexagon',
+            'border-width': 2.5,
+            'border-color': '#4D9EFF',
+            'border-opacity': 0.95,
           },
         },
-        // Tool nodes — green rounded rectangles
+        // Tool nodes — neon green cutrectangles
         {
           selector: 'node[nodeType="tool"]',
           style: {
-            'background-color': '#22C55E',
+            'background-color': '#001A0A',
             'label': 'data(label)',
-            'color': '#F5F5F5',
+            'color': '#A8C0D6',
             'font-size': '11px',
             'font-weight': 500,
             'font-family': "'JetBrains Mono', monospace",
-            'text-valign': 'center',
+            'text-valign': 'bottom',
             'text-halign': 'center',
             'text-wrap': 'wrap',
             'text-max-width': '100px',
+            'text-margin-y': 9,
+            'text-background-color': '#050810',
+            'text-background-opacity': 0.9,
+            'text-background-padding': '3px',
+            'text-background-shape': 'roundrectangle',
             'width': 'label',
             'height': 40,
             'padding': '14px',
-            'shape': 'round-rectangle',
-            'border-width': 1,
-            'border-color': 'rgba(34, 197, 94, 0.3)',
+            'shape': 'cut-rectangle',
+            'border-width': 2,
+            'border-color': '#00E676',
+            'border-opacity': 0.95,
           },
         },
-        // Ingress nodes — purple/orange diamond shapes for entry points
+        // Ingress nodes — neon cyan diamonds
         {
           selector: 'node[nodeType="ingress"]',
           style: {
-            'background-color': '#F97316',
+            'background-color': '#001A22',
             'label': 'data(label)',
-            'color': '#F5F5F5',
+            'color': '#A8C0D6',
             'font-size': '11px',
             'font-weight': 600,
             'font-family': "'JetBrains Mono', monospace",
-            'text-valign': 'center',
+            'text-valign': 'bottom',
             'text-halign': 'center',
             'text-wrap': 'wrap',
             'text-max-width': '100px',
+            'text-margin-y': 9,
+            'text-background-color': '#050810',
+            'text-background-opacity': 0.9,
+            'text-background-padding': '3px',
+            'text-background-shape': 'roundrectangle',
             'width': 'label',
             'height': 40,
             'padding': '14px',
             'shape': 'diamond',
-            'border-width': 2,
-            'border-color': 'rgba(249, 115, 22, 0.5)',
+            'border-width': 3,
+            'border-color': '#00D4FF',
+            'border-opacity': 0.95,
           },
         },
         // Phase flow edges — bright, visible "then" arrows
@@ -541,11 +559,14 @@ export default function GraphCanvas({
       cy.nodes().forEach((node) => {
         const nodeType = node.data('nodeType') as string
         if (nodeType === 'agent') {
-          node.style('border-color', 'rgba(74, 144, 217, 0.3)')
-          node.style('border-width', 2)
+          node.style('border-color', '#4D9EFF')
+          node.style('border-width', 2.5)
         } else if (nodeType === 'tool') {
-          node.style('border-color', 'rgba(34, 197, 94, 0.3)')
-          node.style('border-width', 1)
+          node.style('border-color', '#00E676')
+          node.style('border-width', 2)
+        } else if (nodeType === 'ingress') {
+          node.style('border-color', '#00D4FF')
+          node.style('border-width', 3)
         }
       })
     }

@@ -19,10 +19,9 @@ function Sidebar() {
     { href: '/topology', label: 'Topology' },
     { href: '/sessions', label: 'Sessions' },
     { href: '/agents', label: 'Agents' },
-    { href: '/setup', label: 'Setup & Scan' },
+    { href: '/scan', label: 'Scan Report' },
     { href: '/risk', label: 'Risk Dashboard' },
     { href: '/attacks', label: 'Attack Paths' },
-    { href: '/scan', label: 'Scan Report' },
   ]
 
   return (

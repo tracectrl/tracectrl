@@ -43,6 +43,7 @@ interface Props {
   topology: ScanTopology | null
   workspacePath: string
   onRescan: () => void
+  rescanning?: boolean
   onSelectNode: (node: SelectedNode | null) => void
   onScrollToTopology: () => void
   onFixApplied: (ids: string[]) => void
@@ -53,6 +54,7 @@ export default function FindingsSection({
   topology,
   workspacePath,
   onRescan,
+  rescanning = false,
   onSelectNode,
   onScrollToTopology,
   onFixApplied,
@@ -212,6 +214,10 @@ export default function FindingsSection({
     async (ids: string[]) => {
       if (ids.length === 0) return
       setFixError(null)
+
+      // Save scroll position before applying fixes
+      const scrollPosition = window.scrollY
+
       if (ids.length === 1) setFixingId(ids[0])
       else setFixingAll(true)
       try {
@@ -220,14 +226,24 @@ export default function FindingsSection({
         for (const id of res.applied) next.add(id)
         setFixedIds(next)
         onFixApplied(res.applied)
+
+        // Restore scroll position
+        setTimeout(() => window.scrollTo(0, scrollPosition), 0)
+
+        // Automatically rescan to show the changes
+        if (res.applied.length > 0) {
+          onRescan()
+        }
       } catch (e) {
         setFixError(e instanceof Error ? e.message : 'Fix failed')
+        // Restore scroll position even on error
+        setTimeout(() => window.scrollTo(0, scrollPosition), 0)
       } finally {
         setFixingId(null)
         setFixingAll(false)
       }
     },
-    [workspacePath, fixedIds, onFixApplied]
+    [workspacePath, fixedIds, onFixApplied, onRescan]
   )
 
   const openBrief = useCallback(() => {
@@ -278,7 +294,9 @@ export default function FindingsSection({
               Agent Brief ({manualFailing.length})
             </button>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={onRescan}>Rescan</button>
+          <button className="btn btn-ghost btn-sm" onClick={onRescan} disabled={rescanning}>
+            {rescanning ? 'Scanning…' : 'Rescan'}
+          </button>
         </div>
       </div>
 
