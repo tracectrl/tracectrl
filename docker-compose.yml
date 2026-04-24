@@ -29,9 +29,13 @@ services:
       retries: 10
 
   tracectrl-engine:
-    build: ./engine
+    build:
+      context: .
+      dockerfile: ./engine/Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      - ${HOME}/.openclaw:${HOME}/.openclaw
     environment:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=9000

@@ -138,12 +138,12 @@ export interface SelectedNode {
 
 interface ScanTopologyCanvasProps {
   topology: ScanTopology
-  nodeRiskMap: Map<string, string>
   onNodeClick?: (node: SelectedNode) => void
   selectedNodeId?: string | null
+  newNodeIds?: Set<string>
 }
 
-export default function ScanTopologyCanvas({ topology, nodeRiskMap, onNodeClick, selectedNodeId }: ScanTopologyCanvasProps) {
+export default function ScanTopologyCanvas({ topology, onNodeClick, selectedNodeId, newNodeIds }: ScanTopologyCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
 
@@ -240,9 +240,9 @@ export default function ScanTopologyCanvas({ topology, nodeRiskMap, onNodeClick,
         {
           selector: 'edge',
           style: {
-            'width': 1,
-            'line-color': '#1A3040',
-            'target-arrow-color': '#2A4A60',
+            'width': 2,
+            'line-color': '#2A4A60',
+            'target-arrow-color': '#3A5A70',
             'target-arrow-shape': 'vee',
             'curve-style': 'bezier',
             'arrow-scale': 1,
@@ -316,22 +316,37 @@ export default function ScanTopologyCanvas({ topology, nodeRiskMap, onNodeClick,
     cy.endBatch()
   }, [selectedNodeId, topology])
 
-  // Apply risk border overrides
+  // Risk border colors removed per user request - keeping nodes at their type colors
+
+  // Apply glow effect to new nodes
   useEffect(() => {
     const cy = cyRef.current
-    if (!cy || nodeRiskMap.size === 0) return
+    if (!cy || !newNodeIds || newNodeIds.size === 0) return
 
     cy.startBatch()
-    for (const [nodeId, severity] of nodeRiskMap) {
+    for (const nodeId of newNodeIds) {
       const node = cy.getElementById(nodeId)
       if (node.length === 0) continue
-      const risk = RISK_BORDER[severity]
-      if (risk) {
-        node.style({ 'border-width': risk.width, 'border-color': risk.color })
-      }
+
+      const nodeType = node.data('nodeType') as string
+      const glowColor = NODE_COLORS[nodeType] ?? '#4D9EFF'
+
+      // Apply glow
+      node.style({
+        'overlay-color': glowColor,
+        'overlay-opacity': 0.4,
+        'overlay-padding': 10,
+      })
+
+      // Animate fade out
+      node.animate({
+        style: { 'overlay-opacity': 0 },
+        duration: 2500,
+        easing: 'ease-out',
+      })
     }
     cy.endBatch()
-  }, [nodeRiskMap, topology])
+  }, [newNodeIds])
 
   return (
     <>

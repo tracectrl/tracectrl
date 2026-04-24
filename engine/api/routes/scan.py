@@ -75,37 +75,88 @@ def _compute_config_hash(workspace_path: str) -> str | None:
 
 
 async def _run_scan_subprocess(workspace_path: str, scan_id: str, profile: str) -> None:
-    """Run tracectrl scan in a subprocess and store results."""
+    """Run tracectrl scan using the scanner library directly."""
     try:
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "tracectrl", "scan", workspace_path,
-            "--engine-json", "--no-upload", f"--profile={profile}",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode not in (0, 1):  # 1 = has criticals, still valid
-            raise RuntimeError(f"Scanner exited {proc.returncode}: {stderr.decode()[:500]}")
+        logger.info(f"Starting scan for {workspace_path}")
 
-        import json as _json
-        payload = _json.loads(stdout.decode())
-        checks = payload.get("checks", [])
-        topology = payload.get("topology")
-        scan_path = payload.get("scan_path", workspace_path)
+        # Import scanner library
+        from tracectrl_scanner import parser, discovery
+        from tracectrl_scanner.benchmark.runner import run_all as run_benchmark
+        from tracectrl_scanner.topology.builder import build as build_topology
+
+        # Run scan in thread pool to avoid blocking event loop
+        def _run_scan_sync():
+            workspace = Path(workspace_path)
+
+            # Parse config
+            config = parser.parse_config(workspace)
+
+            # Discover agents
+            agent_ids = discovery.list_agents(workspace)
+
+            # Run security checks
+            check_results = run_benchmark(config, workspace)
+
+            # Build topology
+            topology_graph = build_topology(config, workspace, agent_ids)
+
+            # Convert to engine format
+            checks = []
+            for result in check_results:
+                checks.append({
+                    "check_id": result.check_id,
+                    "section": result.section,
+                    "title": result.title,
+                    "severity": result.severity.value,
+                    "passed": result.passed,
+                    "finding": result.finding or "",
+                    "remediation": result.remediation or "",
+                    "config_path": result.config_path or "",
+                })
+
+            # Convert topology to engine format
+            topology = {
+                "nodes": [
+                    {
+                        "id": n.id,
+                        "type": n.type.value,
+                        "label": n.label,
+                        "properties": n.properties or {}
+                    }
+                    for n in topology_graph.nodes
+                ],
+                "edges": [
+                    {
+                        "id": e.id,
+                        "source": e.source,
+                        "target": e.target,
+                        "type": e.type.value,
+                        "properties": e.properties or {}
+                    }
+                    for e in topology_graph.edges
+                ]
+            }
+
+            return checks, topology
+
+        # Run in thread pool
+        loop = asyncio.get_event_loop()
+        checks, topology = await loop.run_in_executor(None, _run_scan_sync)
+
         config_hash = _compute_config_hash(workspace_path) or ""
 
-        # store_scan_results generates its own scan_id — capture the stored scan_id
-        stored_id = store_scan_results(checks, scan_path, profile, topology=topology)
-
-        # Overwrite the auto-stored scan_run with one that includes the config hash
+        # Store results
+        stored_id = store_scan_results(checks, workspace_path, profile, topology=topology)
         store_scan_run(stored_id, workspace_path, profile, config_hash)
 
         _scan_jobs[scan_id]["status"] = "complete"
         _scan_jobs[scan_id]["stored_scan_id"] = stored_id
         _scan_jobs[scan_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
 
+        logger.info(f"Scan completed successfully for {workspace_path}")
+
     except Exception as e:
-        logger.exception("Scan subprocess failed for %s", workspace_path)
+        logger.exception("Scan failed for %s", workspace_path)
         _scan_jobs[scan_id]["status"] = "failed"
         _scan_jobs[scan_id]["error"] = str(e)
         _scan_jobs[scan_id]["completed_at"] = datetime.now(timezone.utc).isoformat()

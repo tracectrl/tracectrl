@@ -1,9 +1,13 @@
 FROM python:3.12-slim AS base
 
 WORKDIR /app
-COPY requirements.txt .
+COPY engine/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+COPY engine/ .
+
+# Install scanner package (needed for rescan functionality)
+COPY scanner /tmp/scanner
+RUN pip install --no-cache-dir /tmp/scanner && rm -rf /tmp/scanner
 
 # engine/ code uses `from engine.db.client import ...`
 # Create a parent directory with engine/ symlinked so imports resolve correctly

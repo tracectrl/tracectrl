@@ -114,12 +114,21 @@ export async function validateWorkspacePath(path: string): Promise<PathValidatio
 }
 
 export async function triggerScan(workspacePath: string, profile?: 'L1' | 'L2'): Promise<ScanTriggerResponse> {
+  const payload = { workspace_path: workspacePath, ...(profile ? { profile } : {}) }
+  console.log('Trigger scan payload:', payload)
+
   const res = await fetch(`${ENGINE_URL}/api/v1/scan/trigger`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace_path: workspacePath, ...(profile ? { profile } : {}) }),
+    body: JSON.stringify(payload),
   })
-  if (!res.ok) throw new Error(`Failed to trigger scan: ${res.statusText}`)
+
+  if (!res.ok) {
+    const errorText = await res.text()
+    console.error('Trigger scan error response:', errorText)
+    throw new Error(`Failed to trigger scan: ${res.statusText} - ${errorText}`)
+  }
+
   return res.json()
 }
 
