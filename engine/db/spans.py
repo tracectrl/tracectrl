@@ -62,7 +62,10 @@ def fetch_all_spans() -> list[dict]:
             "output_value": attrs.get("output.value", ""),
             "llm_model_name": attrs.get("llm.model_name", ""),
             "llm_system": attrs.get("llm.system", ""),
-            "tool_name": attrs.get("tool.name", ""),
+            "tool_name": (attrs.get("tool.name")
+                          or attrs.get("openclaw.toolName")
+                          or attrs.get("gen_ai.tool.name")
+                          or ""),
             "tool_description": attrs.get("tool.description", ""),
             "tool_parameters": attrs.get("tool.parameters", ""),
             # TraceCtrl security fields from SpanAttributes map
@@ -154,18 +157,40 @@ def fetch_all_spans() -> list[dict]:
         if not name.startswith("openclaw."):
             continue
 
-        if name == "openclaw.model.usage":
+        # OpenClaw emits events as a flat log (no parent context), so all
+        # gateway-emitted spans get pinned to a single canonical agent:
+        # "openclaw-gateway". Channel is preserved as span metadata.
+        OC_AGENT_ID = "openclaw-gateway"
+        OC_AGENT_NAME = "openclaw-gateway"
+
+        if name in ("openclaw.model.usage", "openclaw.model.call"):
             span["oi_span_kind"] = "LLM"
-            span["llm_model_name"] = span["_oc_model"] or span["llm_model_name"]
+            span["llm_model_name"] = (
+                span["_oc_model"]
+                or attrs.get("gen_ai.request.model", "")
+                or span["llm_model_name"]
+            )
+            span["tc_agent_framework"] = "openclaw"
+            span["tc_agent_id"] = span["tc_agent_id"] or OC_AGENT_ID
+            span["tc_agent_name"] = span["tc_agent_name"] or OC_AGENT_NAME
+
+        elif name in ("openclaw.message.processed", "openclaw.run"):
+            span["oi_span_kind"] = "AGENT"
+            span["tc_agent_name"] = OC_AGENT_NAME
+            span["tc_agent_id"] = OC_AGENT_ID
             span["tc_agent_framework"] = "openclaw"
 
-        elif name == "openclaw.message.processed":
-            span["oi_span_kind"] = "AGENT"
-            channel = span["_oc_channel"]
-            display_name = f"openclaw-{channel}" if channel else "openclaw-gateway"
-            span["tc_agent_name"] = display_name
-            span["tc_agent_id"] = display_name.lower().replace(" ", "-")
+        elif name in ("openclaw.tool.execution", "openclaw.exec"):
+            span["oi_span_kind"] = "TOOL"
+            span["tool_name"] = (
+                span["tool_name"]
+                or attrs.get("openclaw.toolName", "")
+                or attrs.get("gen_ai.tool.name", "")
+                or ("exec" if name == "openclaw.exec" else "")
+            )
+            span["tc_tool_category"] = span["tc_tool_category"] or "primitive"
             span["tc_agent_framework"] = "openclaw"
+            span["tc_agent_id"] = span["tc_agent_id"] or OC_AGENT_ID
 
         elif name == "openclaw.webhook.processed":
             span["oi_span_kind"] = "TOOL"

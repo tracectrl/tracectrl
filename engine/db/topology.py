@@ -299,10 +299,10 @@ def _get_agent_ids_for_service(service: str) -> set[str]:
         oc_channel = row[4] if len(row) > 4 else ""
         agent_id = tc_id or agno_id
         if not agent_id:
-            if span_name in ("openclaw.message.processed", "openclaw.session.stuck"):
-                name = f"openclaw-{oc_channel}" if oc_channel else "openclaw-gateway"
-            elif span_name.startswith("openclaw."):
-                name = ""  # LLM/TOOL openclaw spans don't own agent identity
+            if span_name.startswith("openclaw."):
+                # All openclaw.* spans roll up to a single canonical gateway agent
+                # since OpenClaw doesn't propagate parent context across spans.
+                name = "openclaw-gateway"
             elif not agent_name and span_name:
                 if span_name.startswith("invoke_agent "):
                     name = span_name.replace("invoke_agent ", "")
