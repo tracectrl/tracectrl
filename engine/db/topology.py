@@ -347,51 +347,37 @@ def _get_ingress_triggers(service: str | None = None) -> list[dict]:
     import logging
     logger = logging.getLogger(__name__)
 
+    base_select = """
+        SELECT DISTINCT
+            if(SpanAttributes['tracectrl.trigger_type'] != '',
+               SpanAttributes['tracectrl.trigger_type'],
+               JSONExtractString(SpanAttributes['metadata'], 'tracectrl.trigger_type')
+            ) AS trigger_type,
+            SpanAttributes['tracectrl.agent.id'] AS agent_id,
+            SpanAttributes['agno.agent.id'] AS agno_agent_id,
+            SpanAttributes['agent.name'] AS agent_name,
+            SpanName,
+            SpanId,
+            SpanAttributes['openclaw.channel'] AS oc_channel
+    """
+    base_where = """
+        WHERE (SpanAttributes['tracectrl.ingress'] = 'True'
+               OR SpanAttributes['tracectrl.ingress'] = 'true'
+               OR JSONExtractString(SpanAttributes['metadata'], 'tracectrl.ingress') = 'true'
+               OR (ParentSpanId = ''
+                   AND (SpanAttributes['openinference.span.kind'] = 'AGENT'
+                        OR SpanName LIKE '%%.execute'
+                        OR SpanName LIKE 'invoke_agent %%'))
+               OR (SpanName IN ('openclaw.run', 'openclaw.message.processed')
+                   AND SpanAttributes['openclaw.channel'] != ''))
+    """
     if service:
-        query = """
-            SELECT DISTINCT
-                if(SpanAttributes['tracectrl.trigger_type'] != '',
-                   SpanAttributes['tracectrl.trigger_type'],
-                   JSONExtractString(SpanAttributes['metadata'], 'tracectrl.trigger_type')
-                ) AS trigger_type,
-                SpanAttributes['tracectrl.agent.id'] AS agent_id,
-                SpanAttributes['agno.agent.id'] AS agno_agent_id,
-                SpanAttributes['agent.name'] AS agent_name,
-                SpanName,
-                SpanId
-            FROM otel_traces
-            WHERE ((SpanAttributes['tracectrl.ingress'] = 'True'
-                    OR SpanAttributes['tracectrl.ingress'] = 'true'
-                    OR JSONExtractString(SpanAttributes['metadata'], 'tracectrl.ingress') = 'true')
-                   OR (ParentSpanId = ''
-                       AND (SpanAttributes['openinference.span.kind'] = 'AGENT'
-                            OR SpanName LIKE '%%.execute'
-                            OR SpanName LIKE 'invoke_agent %%')))
-              AND ServiceName = %(service)s
-        """
-        rows = execute(query, {"service": service})
+        rows = execute(
+            base_select + " FROM otel_traces " + base_where + " AND ServiceName = %(service)s",
+            {"service": service},
+        )
     else:
-        query = """
-            SELECT DISTINCT
-                if(SpanAttributes['tracectrl.trigger_type'] != '',
-                   SpanAttributes['tracectrl.trigger_type'],
-                   JSONExtractString(SpanAttributes['metadata'], 'tracectrl.trigger_type')
-                ) AS trigger_type,
-                SpanAttributes['tracectrl.agent.id'] AS agent_id,
-                SpanAttributes['agno.agent.id'] AS agno_agent_id,
-                SpanAttributes['agent.name'] AS agent_name,
-                SpanName,
-                SpanId
-            FROM otel_traces
-            WHERE (SpanAttributes['tracectrl.ingress'] = 'True'
-                   OR SpanAttributes['tracectrl.ingress'] = 'true'
-                   OR JSONExtractString(SpanAttributes['metadata'], 'tracectrl.ingress') = 'true'
-                   OR (ParentSpanId = ''
-                       AND (SpanAttributes['openinference.span.kind'] = 'AGENT'
-                            OR SpanName LIKE '%%.execute'
-                            OR SpanName LIKE 'invoke_agent %%')))
-        """
-        rows = execute(query)
+        rows = execute(base_select + " FROM otel_traces " + base_where)
 
     logger.critical(f"[_get_ingress_triggers] ===== Found {len(rows)} ingress spans =====")
 
@@ -402,8 +388,24 @@ def _get_ingress_triggers(service: str | None = None) -> list[dict]:
         agent_name = row[3]
         span_name = row[4]
         span_id = row[5]
+        oc_channel = row[6] if len(row) > 6 else ""
 
-        logger.info(f"[_get_ingress_triggers] Processing: trigger_type={trigger_type}, span_name={span_name}, agent_id={first_agent_id}")
+        logger.info(f"[_get_ingress_triggers] Processing: trigger_type={trigger_type}, span_name={span_name}, agent_id={first_agent_id}, oc_channel={oc_channel}")
+
+        # OpenClaw: channel is the trigger, gateway is the agent.
+        # Filter out internal pseudo-channels (heartbeat, cron, tick) — these are
+        # liveness/scheduled internals, not real external ingress.
+        OC_INTERNAL_CHANNELS = {"heartbeat", "cron", "tick", "internal"}
+        if (
+            span_name in ("openclaw.run", "openclaw.message.processed")
+            and oc_channel
+            and oc_channel not in OC_INTERNAL_CHANNELS
+        ):
+            trigger_type = oc_channel
+            first_agent_id = "openclaw-gateway"
+        elif span_name in ("openclaw.run", "openclaw.message.processed") and oc_channel in OC_INTERNAL_CHANNELS:
+            # Skip internal channels entirely
+            continue
 
         # Fallback inference: if no trigger_type attribute, infer from span name
         if not trigger_type and span_name:
