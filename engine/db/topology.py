@@ -77,10 +77,14 @@ def update_topology(spans: list[dict]):
 
     # --- Step 1: Identify traces with external ingress origin ---
     external_traces: set[str] = set()
-    EXTERNAL_TRIGGERS = {"upload", "email", "webhook", "manual"}
+    EXTERNAL_TRIGGERS = {
+        "upload", "email", "webhook", "manual",
+        # OpenClaw channels — gateway-fronted ingress sources
+        "webchat", "telegram", "slack", "discord", "sms", "whatsapp", "api",
+    }
 
     for span in spans:
-        if span.get("tc_ingress") == "true":
+        if span.get("tc_ingress"):  # truthy: bool True or non-empty string
             trigger_type = span.get("tc_trigger_type", "")
             if trigger_type in EXTERNAL_TRIGGERS:
                 external_traces.add(span.get("trace_id", ""))

@@ -104,6 +104,8 @@ def fetch_all_spans() -> list[dict]:
             "_oc_session_id": attrs.get("openclaw.sessionId", "") or attrs.get("sessionId", ""),
             "_oc_outcome": attrs.get("openclaw.outcome", "") or attrs.get("outcome", ""),
             "_oc_chat_id": attrs.get("openclaw.chatId", "") or attrs.get("chatId", ""),
+            "_oc_trigger": attrs.get("openclaw.trigger", ""),
+            "_gen_ai_request_model": attrs.get("gen_ai.request.model", ""),
         })
 
         # Index by span_id for parent-child lookup
@@ -167,7 +169,7 @@ def fetch_all_spans() -> list[dict]:
             span["oi_span_kind"] = "LLM"
             span["llm_model_name"] = (
                 span["_oc_model"]
-                or attrs.get("gen_ai.request.model", "")
+                or span.get("_gen_ai_request_model", "")
                 or span["llm_model_name"]
             )
             span["tc_agent_framework"] = "openclaw"
@@ -179,15 +181,20 @@ def fetch_all_spans() -> list[dict]:
             span["tc_agent_name"] = OC_AGENT_NAME
             span["tc_agent_id"] = OC_AGENT_ID
             span["tc_agent_framework"] = "openclaw"
+            # Channel = ingress source (webchat / telegram / slack / ...).
+            # OpenClaw doesn't set tracectrl.ingress, so derive it here.
+            channel = span["_oc_channel"]
+            if channel:
+                span["tc_ingress"] = True
+                span["tc_trigger_type"] = channel
+                span["tc_input_source"] = "external"
 
         elif name in ("openclaw.tool.execution", "openclaw.exec"):
             span["oi_span_kind"] = "TOOL"
-            span["tool_name"] = (
-                span["tool_name"]
-                or attrs.get("openclaw.toolName", "")
-                or attrs.get("gen_ai.tool.name", "")
-                or ("exec" if name == "openclaw.exec" else "")
-            )
+            # tool_name was already populated at extraction time from
+            # tool.name / openclaw.toolName / gen_ai.tool.name fallbacks.
+            if not span["tool_name"] and name == "openclaw.exec":
+                span["tool_name"] = "exec"
             span["tc_tool_category"] = span["tc_tool_category"] or "primitive"
             span["tc_agent_framework"] = "openclaw"
             span["tc_agent_id"] = span["tc_agent_id"] or OC_AGENT_ID
