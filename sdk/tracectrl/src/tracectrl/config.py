@@ -108,6 +108,13 @@ def get_tracer_provider() -> TracerProvider:
                     max_export_batch_size=_config.max_batch_size,
                 )
             )
+        # Auto-install the agent-prompt stamper so any subsequent tag_agent()
+        # calls take effect without requiring the user to wire processors.
+        try:
+            from tracectrl.agent_tagging import _ensure_processor_installed
+            _ensure_processor_installed(_tracer_provider)
+        except Exception:
+            logger.debug("could not install SystemPromptStamper", exc_info=True)
         trace.set_tracer_provider(_tracer_provider)
         _configured = True
 
