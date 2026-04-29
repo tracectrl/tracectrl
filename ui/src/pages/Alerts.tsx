@@ -67,6 +67,13 @@ export default function Alerts() {
     }
   }
 
+  // Single source of truth for closing the evidence drawer — every close
+  // path goes through this so the URL focus param doesn't get stranded.
+  const closeEvidenceDrawer = () => {
+    setDrawerViolation(null)
+    clearFocus()
+  }
+
   const totalCount = violations.length
 
   return (
@@ -89,10 +96,11 @@ export default function Alerts() {
       <div className="alerts-filters" role="toolbar" aria-label="Filter by severity">
         <button
           type="button"
-          className={`chip${activeSeverities.size === 0 ? ' chip-active' : ''}`}
+          className={`chip${activeSeverities.size === 0 ? ' chip-active' : ' chip-clear'}`}
           onClick={() => setActiveSeverities(new Set())}
+          aria-label={activeSeverities.size === 0 ? 'Showing all severities' : 'Clear severity filters'}
         >
-          All
+          {activeSeverities.size === 0 ? 'All' : 'Clear filters'}
         </button>
         {SEVERITIES.map(s => (
           <button
@@ -131,7 +139,7 @@ export default function Alerts() {
 
       <Drawer
         open={drawerViolation !== null}
-        onClose={() => { setDrawerViolation(null); clearFocus() }}
+        onClose={closeEvidenceDrawer}
         ariaLabel="Violation evidence"
         tone={drawerViolation?.severity ?? 'neutral'}
         widthPx={520}
@@ -144,7 +152,7 @@ export default function Alerts() {
                 <h3 style={{ margin: '4px 0 0' }}>Violation evidence</h3>
               </div>
               <div style={{ marginLeft: 'auto' }}>
-                <DrawerClose onClose={() => { setDrawerViolation(null); clearFocus() }} />
+                <DrawerClose onClose={closeEvidenceDrawer} />
               </div>
             </header>
 
@@ -195,7 +203,7 @@ export default function Alerts() {
                 <Link
                   to={`/sessions/${drawerViolation.trace_id}`}
                   className="btn btn-primary btn-sm"
-                  onClick={() => setDrawerViolation(null)}
+                  onClick={closeEvidenceDrawer}
                 >
                   Open trace
                 </Link>

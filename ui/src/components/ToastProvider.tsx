@@ -68,13 +68,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       createdAt: Date.now(),
       phase: 'enter',
     }
+    // Clear any existing timer for this id so a re-push doesn't get torn
+    // down prematurely by the previous instance's auto-dismiss timer.
+    const existingTimer = timeoutsRef.current.get(id)
+    if (existingTimer) {
+      window.clearTimeout(existingTimer)
+      timeoutsRef.current.delete(id)
+    }
     setToasts(prev => {
-      const next = [item, ...prev]
-      // Cap at MAX_VISIBLE — overflow toasts dismissed immediately
-      if (next.length > MAX_VISIBLE) {
-        const trimmed = next.slice(0, MAX_VISIBLE)
-        return trimmed
-      }
+      // De-duplicate by id (re-push with same id replaces the old entry).
+      const filtered = prev.filter(t => t.id !== id)
+      const next = [item, ...filtered]
+      if (next.length > MAX_VISIBLE) return next.slice(0, MAX_VISIBLE)
       return next
     })
     // Promote enter -> visible on next tick to trigger CSS transition
@@ -109,26 +114,32 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {createPortal(
         <div className="toast-container" role="region" aria-label="Notifications" aria-live="polite">
           {toasts.map(t => (
-            <button
+            <div
               key={t.id}
-              type="button"
               className={`toast toast-${t.severity} toast-${t.phase}`}
-              onClick={() => handleClick(t)}
+              role="status"
             >
               <span className="toast-accent" aria-hidden="true" />
-              <div className="toast-content">
-                <div className="toast-title">{t.title}</div>
-                {t.body && <div className="toast-body">{t.body}</div>}
-              </div>
-              <span
+              <button
+                type="button"
+                className="toast-body-button"
+                onClick={() => handleClick(t)}
+                aria-label={t.violationId ? `Open ${t.title} in alerts` : t.title}
+              >
+                <div className="toast-content">
+                  <div className="toast-title">{t.title}</div>
+                  {t.body && <div className="toast-body">{t.body}</div>}
+                </div>
+              </button>
+              <button
+                type="button"
                 className="toast-dismiss"
-                role="presentation"
-                onClick={e => { e.stopPropagation(); dismiss(t.id) }}
-                aria-label="Dismiss"
+                onClick={() => dismiss(t.id)}
+                aria-label="Dismiss notification"
               >
                 ×
-              </span>
-            </button>
+              </button>
+            </div>
           ))}
         </div>,
         document.body

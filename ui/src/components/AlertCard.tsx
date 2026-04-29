@@ -12,15 +12,17 @@ interface Props {
 function formatTime(iso: string): string {
   try {
     const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return iso
-    const now = Date.now()
-    const diffSec = Math.round((now - d.getTime()) / 1000)
+    if (Number.isNaN(d.getTime())) return '—'
+    // Clamp negatives in case of clock skew between SDK host (where the span
+    // was emitted) and the user's machine — "−12s ago" looks broken.
+    const diffSec = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000))
     if (diffSec < 60) return `${diffSec}s ago`
     if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
     if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
-    return d.toLocaleString()
+    // Older than a day — short calendar form, not the noisy full ISO.
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   } catch {
-    return iso
+    return '—'
   }
 }
 

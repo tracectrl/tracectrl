@@ -103,11 +103,19 @@ export default function Agents() {
               </header>
               <div className="agent-grid">
                 {group.agents.map(agent => (
-                  <button
+                  <div
                     key={agent.agent_id}
                     className="agent-card"
-                    onClick={() => setSelected(agent)}
+                    role="button"
+                    tabIndex={0}
                     aria-label={`Open ${agent.name || agent.agent_id} details`}
+                    onClick={() => setSelected(agent)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setSelected(agent)
+                      }
+                    }}
                   >
                     <div className="agent-card-head">
                       <div className="agent-card-name" title={agent.name || agent.agent_id}>
@@ -139,7 +147,7 @@ export default function Agents() {
                     <div className="agent-card-foot text-muted">
                       Last seen {formatRelative(agent.last_seen)}
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </section>
