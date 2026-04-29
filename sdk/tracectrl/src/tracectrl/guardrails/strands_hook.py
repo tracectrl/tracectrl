@@ -11,11 +11,53 @@ to this file.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Iterable, List
 
-from tracectrl.guardrails.guardrail import Guardrail
+from opentelemetry import trace
+
+from tracectrl.guardrails.guardrail import Guardrail, _model_identifier
 
 logger = logging.getLogger(__name__)
+
+
+_REGISTRATION_SPAN_NAME = "tracectrl.guardrail.registered"
+
+
+def _emit_registration_span(agent_id: str, agent_name: str, guardrail: Guardrail) -> None:
+    """Emit a one-shot registration span so the engine can populate
+    guardrail_registry before any violation has fired. Idempotent on the
+    engine side (ReplacingMergeTree dedups on agent_id+guardrail_name)."""
+    try:
+        tracer = trace.get_tracer("tracectrl.guardrails")
+        with tracer.start_as_current_span(_REGISTRATION_SPAN_NAME) as span:
+            span.set_attribute("tracectrl.agent.id", agent_id)
+            span.set_attribute("tracectrl.agent.name", agent_name)
+            span.set_attribute("tracectrl.guardrail.name", guardrail.name)
+            span.set_attribute("tracectrl.guardrail.severity", guardrail.severity)
+            span.set_attribute("tracectrl.guardrail.timing", guardrail.timing)
+            span.set_attribute(
+                "tracectrl.guardrail.mode",
+                "blocking" if guardrail.on_violation == "block" else "monitoring",
+            )
+            span.set_attribute(
+                "tracectrl.guardrail.judge_model",
+                _model_identifier(guardrail.judge_llm),
+            )
+            span.set_attribute("tracectrl.guardrail.description", guardrail.description or "")
+            span.set_attribute(
+                "tracectrl.guardrail.registered_at",
+                datetime.now(timezone.utc).isoformat(),
+            )
+            # Health is best-effort: we have no way to ping the judge LLM
+            # without invoking it (which would cost a real API call). Mark
+            # as 'active' on registration; the engine flips to 'error' when
+            # a guardrail evaluation span carries decision='error' for that
+            # (agent_id, guardrail_name) pair.
+            span.set_attribute("tracectrl.guardrail.health", "active")
+            span.set_attribute("tracectrl.guardrail.health_reason", "")
+    except Exception:
+        logger.debug("failed to emit guardrail registration span", exc_info=True)
 
 
 def wrap_agent_with_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> Any:
@@ -49,6 +91,12 @@ def wrap_agent_with_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> A
         getattr(agent, "agent_id", None)
         or (agent_name.lower().replace(" ", "-") if isinstance(agent_name, str) else None)
     )
+
+    # Emit a registration span per guardrail so the engine can populate
+    # guardrail_registry before any violation fires. Without this, the UI
+    # only sees guardrails after they've blocked something.
+    for g in rails:
+        _emit_registration_span(agent_id, agent_name, g)
 
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         # pre_input: best-effort grab of the prompt from args/kwargs.
@@ -92,6 +140,27 @@ def wrap_agent_with_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> A
             raise
 
     return agent
+
+
+def register_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> None:
+    """Emit registration spans without wrapping the agent.
+
+    Use when you want guardrails to appear in the TraceCtrl UI as 'registered
+    but not yet attached' — useful for staging declarations during config or
+    for declarative agent definitions where wrapping happens elsewhere. For
+    most cases, prefer `wrap_agent_with_guardrails` which both registers AND
+    wires up the runtime evaluation.
+    """
+    rails = list(guardrails)
+    if not rails:
+        return
+    agent_name = getattr(agent, "name", None) or type(agent).__name__
+    agent_id = (
+        getattr(agent, "agent_id", None)
+        or (agent_name.lower().replace(" ", "-") if isinstance(agent_name, str) else None)
+    )
+    for g in rails:
+        _emit_registration_span(agent_id, agent_name, g)
 
 
 def _extract_input(args: tuple, kwargs: dict) -> str | None:

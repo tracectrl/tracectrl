@@ -18,6 +18,7 @@ interface GraphCanvasProps {
   attackMode?: boolean
   overlay?: AttackOverlay | null
   selectedAttackPath?: AttackPath | null
+  guardedAgentIds?: Set<string>
 }
 
 /**
@@ -117,7 +118,7 @@ function buildElements(
 }
 
 export default function GraphCanvas({
-  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks, attackMode, overlay, selectedAttackPath
+  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks, attackMode, overlay, selectedAttackPath, guardedAgentIds
 }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
@@ -572,6 +573,40 @@ export default function GraphCanvas({
     }
     cy.endBatch()
   }, [attackerView, agentRisks])
+
+  // Guarded-agent styling: visualises agents with >=1 active guardrail.
+  // Approach chosen: thicker green outline as a fallback (Cytoscape inline
+  // SVG markers proved fiddly to layer over the existing per-nodeType styles
+  // without breaking attacker-view / attack-mode overrides). When attackMode
+  // or attackerView is active, those modes own border styling, so we skip.
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+    if (attackMode || attackerView) return
+
+    cy.startBatch()
+    cy.nodes().forEach((node) => {
+      const nodeType = node.data('nodeType') as string
+      if (nodeType !== 'agent') return
+      const id = node.data('id') as string
+      const label = node.data('label') as string
+      const labelKey = label?.toLowerCase().replace(/\s+/g, '-')
+      const isGuarded = !!guardedAgentIds && (
+        guardedAgentIds.has(id) ||
+        (labelKey ? guardedAgentIds.has(labelKey) : false)
+      )
+      if (isGuarded) {
+        node.style('border-color', '#22C55E')
+        node.style('border-width', 4)
+        node.data('guarded', true)
+      } else {
+        node.style('border-color', '#4D9EFF')
+        node.style('border-width', 2.5)
+        node.removeData('guarded')
+      }
+    })
+    cy.endBatch()
+  }, [guardedAgentIds, attackMode, attackerView, data])
 
   // Attack mode styling effect
   useEffect(() => {

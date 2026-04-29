@@ -10,6 +10,7 @@ import { fetchTopologyGraph, TopologyGraph, TopologyNode, fetchAttackPaths, fetc
 import { fetchLatestSpans, fetchSessions, fetchTraceSpans, SpanDetail, SessionSummary, formatDuration } from '../api/sessions'
 import { fetchAgentRisks, AgentRisk } from '../api/risk'
 import { fetchAgentList, AgentSummary } from '../api/agents'
+import { fetchGuardrails } from '../api/guardrails'
 import { usePhaseInference } from '../hooks/usePhaseInference'
 import { useProject } from '../context/ProjectContext'
 
@@ -35,6 +36,7 @@ export default function TopologyGraphPage() {
   const [attackPaths, setAttackPaths] = useState<AttackPath[]>([])
   const [overlay, setOverlay] = useState<AttackOverlay | null>(null)
   const [selectedAttackPath, setSelectedAttackPath] = useState<AttackPath | null>(null)
+  const [guardedAgentIds, setGuardedAgentIds] = useState<Set<string>>(new Set())
 
   useEffect(() => { document.title = 'Topology — TraceCtrl' }, [])
 
@@ -52,6 +54,15 @@ export default function TopologyGraphPage() {
       .finally(() => setLoading(false))
     fetchAgentRisks(selectedProject).then(setAgentRisks).catch(() => {})
     fetchAgentList(selectedProject).then(setAgents).catch(() => {})
+    fetchGuardrails()
+      .then(list => {
+        const guarded = new Set<string>()
+        for (const g of list) {
+          if (g.health === 'active') guarded.add(g.agent_id)
+        }
+        setGuardedAgentIds(guarded)
+      })
+      .catch(() => setGuardedAgentIds(new Set()))
     fetchSessions(selectedProject).then(list => {
       setSessions(list)
       if (list.length > 0 && !hasDefaultedTraceRef.current) {
@@ -275,6 +286,7 @@ export default function TopologyGraphPage() {
         attackMode={attackMode}
         overlay={overlay}
         selectedAttackPath={selectedAttackPath}
+        guardedAgentIds={guardedAgentIds}
       />
 
       {replaySpans.length > 0 && traceDurationNs > 0 && (

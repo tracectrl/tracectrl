@@ -107,3 +107,18 @@ class Violation(BaseModel):
     evidence: str
     severity: str   # one of critical/high/medium/low
     observed_at: datetime
+
+
+class GuardrailRegistration(BaseModel):
+    agent_id: str
+    guardrail_name: str
+    severity: str        # low|medium|high|critical
+    mode: str            # monitoring|blocking
+    timing: str          # post_output|pre_input
+    judge_model: str
+    description: str
+    health: str          # active|error|disabled
+    health_reason: str
+    registered_at: datetime
+    last_seen_at: datetime
+    recent_activity_24h: int = 0
