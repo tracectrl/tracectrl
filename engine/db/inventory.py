@@ -140,8 +140,16 @@ def get_all_agents(service: str | None = None) -> list[dict]:
         counts_by_agent.setdefault(agent_id, {})[tool_name] = int(calls or 0)
         totals_by_agent[agent_id] = totals_by_agent.get(agent_id, 0) + int(calls or 0)
     for r in results:
-        r["tool_call_counts"] = counts_by_agent.get(r["agent_id"], {})
+        agent_counts = counts_by_agent.get(r["agent_id"], {})
+        r["tool_call_counts"] = agent_counts
         r["total_tool_calls"] = totals_by_agent.get(r["agent_id"], 0)
+        # Strands agents don't carry tool_name on their own AGENT spans, so the
+        # stored tools_observed column is empty. The authoritative tool list
+        # lives in topology_tool_edges; merge it in so UI counts match reality.
+        edge_tools = set(agent_counts.keys())
+        if edge_tools:
+            existing = set(r.get("tools_observed") or [])
+            r["tools_observed"] = sorted(existing | edge_tools)
 
     if service:
         svc_rows = execute(
