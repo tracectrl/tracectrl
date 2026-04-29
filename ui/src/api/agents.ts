@@ -7,6 +7,9 @@ export interface AgentSummary {
   role: string
   model: string
   tools_observed: string[]
+  tool_call_counts: Record<string, number>
+  total_tool_calls: number
+  system_prompt: string
   system_prompt_hash: string
   run_count: number
   observation_count: number

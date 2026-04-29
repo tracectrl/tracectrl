@@ -5,9 +5,11 @@ import PhaseReplaySlider from '../components/PhaseReplaySlider'
 import AttackFindingsPanel from '../components/AttackFindingsPanel'
 import EmptyState from '../components/shared/EmptyState'
 import ErrorBanner from '../components/shared/ErrorBanner'
+import AgentDetailPanel from '../components/AgentDetailPanel'
 import { fetchTopologyGraph, TopologyGraph, TopologyNode, fetchAttackPaths, fetchAttackOverlay, AttackPath, AttackOverlay } from '../api/client'
-import { fetchLatestSpans, SpanDetail } from '../api/sessions'
+import { fetchLatestSpans, fetchSessions, fetchTraceSpans, SpanDetail, SessionSummary, formatDuration } from '../api/sessions'
 import { fetchAgentRisks, AgentRisk } from '../api/risk'
+import { fetchAgentList, AgentSummary } from '../api/agents'
 import { usePhaseInference } from '../hooks/usePhaseInference'
 import { useProject } from '../context/ProjectContext'
 
@@ -15,13 +17,20 @@ export default function TopologyGraphPage() {
   const { selectedProject } = useProject()
   const [graph, setGraph] = useState<TopologyGraph | null>(null)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<AgentSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [latestSpans, setLatestSpans] = useState<SpanDetail[]>([])
+
+  // Replay state
+  const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null)
+  const [replaySpans, setReplaySpans] = useState<SpanDetail[]>([])
+  const [replayNs, setReplayNs] = useState<number | null>(null)
+
   const [showPhases, setShowPhases] = useState(false)
   const [perspective, setPerspective] = useState<'developer' | 'attacker'>('developer')
   const [agentRisks, setAgentRisks] = useState<AgentRisk[]>([])
-  const [replayNs, setReplayNs] = useState<number | null>(null)
+  const [agents, setAgents] = useState<AgentSummary[]>([])
   const [attackMode, setAttackMode] = useState(false)
   const [attackPaths, setAttackPaths] = useState<AttackPath[]>([])
   const [overlay, setOverlay] = useState<AttackOverlay | null>(null)
@@ -36,11 +45,28 @@ export default function TopologyGraphPage() {
       .then(setGraph)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-    fetchLatestSpans(selectedProject).then(setLatestSpans).catch(() => {})
     fetchAgentRisks(selectedProject).then(setAgentRisks).catch(() => {})
-  }, [selectedProject])
+    fetchAgentList(selectedProject).then(setAgents).catch(() => {})
+    // Sessions feed the picker; default to latest.
+    fetchSessions(selectedProject).then(list => {
+      setSessions(list)
+      if (list.length > 0 && !selectedTraceId) {
+        setSelectedTraceId(list[0].trace_id)
+      }
+    }).catch(() => {})
+  }, [selectedProject, selectedTraceId])
 
   useEffect(() => { load() }, [load])
+
+  // Load spans for the picked session. Falls back to latest spans for the very
+  // first render before the session list resolves.
+  useEffect(() => {
+    if (selectedTraceId) {
+      fetchTraceSpans(selectedTraceId).then(setReplaySpans).catch(() => setReplaySpans([]))
+    } else {
+      fetchLatestSpans(selectedProject).then(setReplaySpans).catch(() => setReplaySpans([]))
+    }
+  }, [selectedTraceId, selectedProject])
 
   useEffect(() => {
     if (attackMode) {
@@ -50,47 +76,81 @@ export default function TopologyGraphPage() {
   }, [attackMode])
 
   const handleNodeSelect = useCallback((node: TopologyNode | null) => {
+    if (node?.type === 'agent') {
+      // Resolve to a full AgentSummary so we can reuse <AgentDetailPanel>.
+      const match =
+        agents.find(a => a.agent_id === node.id) ||
+        agents.find(a => a.name === node.label) ||
+        agents.find(a => a.agent_id === node.label?.toLowerCase().replace(/\s+/g, '-'))
+      if (match) {
+        setSelectedAgent(match)
+        setSelectedNode(null)
+        return
+      }
+    }
     setSelectedNode(node)
-  }, [])
+    setSelectedAgent(null)
+  }, [agents])
 
-  const phases = usePhaseInference(latestSpans)
+  const phases = usePhaseInference(replaySpans)
 
   const traceStartNs = useMemo(() => {
-    if (latestSpans.length === 0) return 0
-    return Math.min(...latestSpans.map(s => s.start_ns))
-  }, [latestSpans])
+    if (replaySpans.length === 0) return 0
+    return Math.min(...replaySpans.map(s => s.start_ns))
+  }, [replaySpans])
 
   const traceDurationNs = useMemo(() => {
-    if (latestSpans.length === 0) return 0
-    const endNs = Math.max(...latestSpans.map(s => s.start_ns + s.duration_ns))
+    if (replaySpans.length === 0) return 0
+    const endNs = Math.max(...replaySpans.map(s => s.start_ns + s.duration_ns))
     return endNs - traceStartNs
-  }, [latestSpans, traceStartNs])
+  }, [replaySpans, traceStartNs])
 
+  // WS3 bug fix: zero-duration spans (agent-as-tool delegation markers in
+  // Strands sometimes produce these) were dropped by the strict `start <= ns
+  // <= end` check at the trace tail. Treat zero-duration as a small point and
+  // include them when the slider is at or past their start_ns.
   const highlightedNodeIds = useMemo(() => {
     if (replayNs === null) return undefined
+    const traceEnd = traceStartNs + traceDurationNs
+    const isAtMax = replayNs >= traceEnd
     const activeIds = new Set<string>()
-    for (const span of latestSpans) {
-      const spanEnd = span.start_ns + span.duration_ns
-      if (span.start_ns <= replayNs && spanEnd >= replayNs) {
-        const agentId =
-          span.attributes['tracectrl.agent.id'] ||
-          span.attributes['agno.agent.id'] ||
-          span.attributes['tracectrl.agent.name'] ||
-          span.attributes['agent.name'] ||
-          span.span_name.replace('.run', '')
-        if (agentId) {
-          activeIds.add(agentId)
-          activeIds.add(agentId.toLowerCase().replace(/\s+/g, '-'))
-        }
+    for (const span of replaySpans) {
+      const dur = span.duration_ns
+      const spanStart = span.start_ns
+      const spanEnd = spanStart + dur
+      const inWindow =
+        dur === 0
+          ? spanStart <= replayNs
+          : (spanStart <= replayNs && spanEnd >= replayNs) ||
+            // At the very end of the slider, include any span that ended
+            // exactly at the trace boundary so the last node always lights up.
+            (isAtMax && spanEnd === traceEnd)
+      if (!inWindow) continue
+      const agentId =
+        span.attributes['tracectrl.agent.id'] ||
+        span.attributes['agno.agent.id'] ||
+        span.attributes['tracectrl.agent.name'] ||
+        span.attributes['agent.name'] ||
+        span.span_name.replace('.run', '')
+      if (agentId) {
+        activeIds.add(agentId)
+        activeIds.add(agentId.toLowerCase().replace(/\s+/g, '-'))
       }
     }
     return activeIds.size > 0 ? activeIds : undefined
-  }, [replayNs, latestSpans])
+  }, [replayNs, replaySpans, traceStartNs, traceDurationNs])
 
   const agentCount = graph?.nodes.filter(n => n.type === 'agent').length ?? 0
   const toolCount = graph?.nodes.filter(n => n.type === 'tool').length ?? 0
 
   const attackerView = perspective === 'attacker'
+
+  const formatSessionLabel = (s: SessionSummary) => {
+    const t = new Date(s.start_time).toLocaleTimeString(undefined, {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    })
+    return `${s.root_span_name || 'session'} · ${formatDuration(s.total_duration_ns)} · ${t}`
+  }
 
   return (
     <div>
@@ -108,6 +168,26 @@ export default function TopologyGraphPage() {
         </div>
         {!loading && graph && (
           <div className="topo-controls">
+            {sessions.length > 0 && (
+              <div className="topo-session-picker">
+                <label htmlFor="session-picker">Session</label>
+                <select
+                  id="session-picker"
+                  value={selectedTraceId || ''}
+                  onChange={e => {
+                    setSelectedTraceId(e.target.value || null)
+                    setReplayNs(null)
+                  }}
+                >
+                  {sessions.slice(0, 50).map(s => (
+                    <option key={s.trace_id} value={s.trace_id}>
+                      {formatSessionLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="segmented" role="group" aria-label="Perspective">
               <button
                 type="button"
@@ -136,7 +216,7 @@ export default function TopologyGraphPage() {
               Attack Surface
             </button>
 
-            {latestSpans.length > 0 && (
+            {replaySpans.length > 0 && (
               <label className="topo-phase-check">
                 <input
                   type="checkbox"
@@ -174,7 +254,7 @@ export default function TopologyGraphPage() {
         selectedAttackPath={selectedAttackPath}
       />
 
-      {latestSpans.length > 0 && traceDurationNs > 0 && (
+      {replaySpans.length > 0 && traceDurationNs > 0 && (
         <PhaseReplaySlider
           traceStartNs={traceStartNs}
           traceDurationNs={traceDurationNs}
@@ -195,7 +275,16 @@ export default function TopologyGraphPage() {
           }}
         />
       ) : (
-        <SidebarPanel node={selectedNode} onClose={() => setSelectedNode(null)} />
+        <>
+          <AgentDetailPanel
+            agent={selectedAgent}
+            onClose={() => setSelectedAgent(null)}
+          />
+          <SidebarPanel
+            node={selectedAgent ? null : selectedNode}
+            onClose={() => setSelectedNode(null)}
+          />
+        </>
       )}
     </div>
   )
