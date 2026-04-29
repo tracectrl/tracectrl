@@ -8,6 +8,25 @@ We extract tracectrl.* attributes from the SpanAttributes map.
 from engine.db.client import execute
 
 
+def _system_prompt_from_messages(attrs: dict) -> str:
+    """Fallback: scan llm.input_messages.N for a row whose role is 'system'.
+
+    OpenInference's standard chat-instrumentation pattern emits each message
+    as a flat `llm.input_messages.<i>.message.{role,content}` pair. Strands
+    strips the system message before instrumenting (so this returns ''), but
+    LangChain / Agno / many OpenAI wrappers include it. We scan up to 8 rows
+    — the system message is conventionally row 0, but we tolerate non-zero
+    placement for robustness.
+    """
+    for i in range(8):
+        role = attrs.get(f"llm.input_messages.{i}.message.role")
+        if not role:
+            break
+        if role == "system":
+            return attrs.get(f"llm.input_messages.{i}.message.content", "")
+    return ""
+
+
 def fetch_all_spans() -> list[dict]:
     """Fetch all spans from the OTel exporter table. ReplacingMergeTree handles deduplication."""
     rows = execute(
@@ -61,7 +80,21 @@ def fetch_all_spans() -> list[dict]:
             "input_value": attrs.get("input.value", ""),
             "output_value": attrs.get("output.value", ""),
             "llm_model_name": attrs.get("llm.model_name", ""),
+            # NOTE: `llm.system` per OpenInference / OTel GenAI semconv is the
+            # PROVIDER NAME ("anthropic", "strands-agents"), not the system
+            # prompt. We keep it here for completeness but never use it as the
+            # prompt source — see `tc_system_prompt` below.
             "llm_system": attrs.get("llm.system", ""),
+            # System prompt — sourced in priority order:
+            #   1. tracectrl.agent.system_prompt (set by tracectrl.tag_agent)
+            #   2. fallback: a system-role row in llm.input_messages.N
+            #      (some OpenInference instrumentors emit this; Strands does
+            #      not as of 2026-04, but Agno and LangChain often do)
+            "tc_system_prompt": (
+                attrs.get("tracectrl.agent.system_prompt")
+                or _system_prompt_from_messages(attrs)
+                or ""
+            ),
             "tool_name": (attrs.get("tool.name")
                           or attrs.get("openclaw.toolName")
                           or attrs.get("gen_ai.tool.name")
@@ -91,7 +124,11 @@ def fetch_all_spans() -> list[dict]:
             "tc_tool_target": attrs.get("tracectrl.tool.target", ""),
             "tc_memory_operation": attrs.get("tracectrl.memory.operation", ""),
             "tc_memory_store_id": attrs.get("tracectrl.memory.store_id", ""),
-            "tc_system_prompt_hash": attrs.get("tracectrl.system_prompt_hash", ""),
+            "tc_system_prompt_hash": (
+                attrs.get("tracectrl.agent.system_prompt_hash")
+                or attrs.get("tracectrl.system_prompt_hash")
+                or ""
+            ),
             "tc_span_sequence": int(attrs.get("tracectrl.span_sequence", "0") or "0"),
             # Ingress detection
             "tc_ingress": attrs.get("tracectrl.ingress", "") == "True" or attrs.get("tracectrl.ingress", "") == "true",

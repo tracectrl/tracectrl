@@ -78,8 +78,12 @@ def update_agent_inventory(spans: list[dict]):
             agent["tools_observed"].add(span["tool_name"])
         if span.get("llm_model_name"):
             agent["model"] = span["llm_model_name"]
-        if span.get("llm_system"):
-            agent["system_prompt"] = span["llm_system"]
+        # tc_system_prompt is the authoritative source: set by tag_agent's
+        # SpanProcessor, or extracted from a `system`-role message on LLM
+        # spans. The legacy `llm_system` key is the PROVIDER NAME (per
+        # OpenInference / GenAI semconv), not the prompt — never use it.
+        if span.get("tc_system_prompt"):
+            agent["system_prompt"] = span["tc_system_prompt"]
             agent["system_prompt_hash"] = span.get("tc_system_prompt_hash", "")
 
     now = datetime.utcnow()
