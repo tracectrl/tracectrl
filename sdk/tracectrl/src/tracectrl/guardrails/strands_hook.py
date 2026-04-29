@@ -41,6 +41,15 @@ def wrap_agent_with_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> A
         original_call._tracectrl_rails = rails  # type: ignore[attr-defined]
         return agent
 
+    # Resolve the agent identity once so every eval span carries it. We try
+    # several common Strands attributes; the engine derives the same id from
+    # the agent run span for join correctness.
+    agent_name = getattr(agent, "name", None) or type(agent).__name__
+    agent_id = (
+        getattr(agent, "agent_id", None)
+        or (agent_name.lower().replace(" ", "-") if isinstance(agent_name, str) else None)
+    )
+
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         # pre_input: best-effort grab of the prompt from args/kwargs.
         if pre_rails:
@@ -48,7 +57,7 @@ def wrap_agent_with_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> A
             if user_input is not None:
                 for g in pre_rails:
                     try:
-                        g.evaluate(user_input)
+                        g.evaluate(user_input, agent_id=agent_id, agent_name=agent_name)
                     except Exception:  # noqa: BLE001
                         logger.exception("guardrail %s raised during pre_input eval", g.name)
 
@@ -60,7 +69,7 @@ def wrap_agent_with_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> A
             output_text = _stringify_response(response)
             for g in post_rails:
                 try:
-                    g.evaluate(output_text)
+                    g.evaluate(output_text, agent_id=agent_id, agent_name=agent_name)
                 except Exception:  # noqa: BLE001 — never break the agent
                     logger.exception("guardrail %s raised during post_output eval", g.name)
 
