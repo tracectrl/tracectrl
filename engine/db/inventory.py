@@ -112,7 +112,7 @@ def get_all_agents(service: str | None = None) -> list[dict]:
     rows = execute(
         """
         SELECT agent_id, name, framework, role, model,
-               tools_observed, system_prompt_hash, run_count,
+               tools_observed, system_prompt, system_prompt_hash, run_count,
                observation_count, maturity, first_seen, last_seen
         FROM agent_inventory FINAL
         ORDER BY last_seen DESC
@@ -120,10 +120,28 @@ def get_all_agents(service: str | None = None) -> list[dict]:
     )
     columns = [
         "agent_id", "name", "framework", "role", "model",
-        "tools_observed", "system_prompt_hash", "run_count",
+        "tools_observed", "system_prompt", "system_prompt_hash", "run_count",
         "observation_count", "maturity", "first_seen", "last_seen",
     ]
     results = [dict(zip(columns, row)) for row in rows]
+
+    # Pull per-tool call counts from topology_tool_edges (single grouped query
+    # so we don't fan out N SELECTs across agents).
+    tool_rows = execute(
+        """
+        SELECT agent_id, tool_name, sum(call_count) AS calls
+        FROM topology_tool_edges FINAL
+        GROUP BY agent_id, tool_name
+        """
+    )
+    counts_by_agent: dict[str, dict[str, int]] = {}
+    totals_by_agent: dict[str, int] = {}
+    for agent_id, tool_name, calls in tool_rows:
+        counts_by_agent.setdefault(agent_id, {})[tool_name] = int(calls or 0)
+        totals_by_agent[agent_id] = totals_by_agent.get(agent_id, 0) + int(calls or 0)
+    for r in results:
+        r["tool_call_counts"] = counts_by_agent.get(r["agent_id"], {})
+        r["total_tool_calls"] = totals_by_agent.get(r["agent_id"], 0)
 
     if service:
         svc_rows = execute(

@@ -7,22 +7,28 @@ import RiskDashboard from './pages/RiskDashboard'
 import AttackPaths from './pages/AttackPaths'
 import ScanReport from './pages/ScanReport'
 import SetupPage from './pages/SetupPage'
+import Alerts from './pages/Alerts'
 import { ProjectProvider, useProject } from './context/ProjectContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
+import { ToastProvider } from './components/ToastProvider'
+import { ViolationsProvider, useViolationsContext } from './context/ViolationsContext'
 
 function Sidebar() {
   const location = useLocation()
   const { projects, selectedProject, setSelectedProject, loading: projectsLoading } = useProject()
   const { theme, toggleTheme } = useTheme()
 
+  const { unreadCount } = useViolationsContext()
+
   const navItems = [
-    { href: '/topology', label: 'Topology' },
-    { href: '/sessions', label: 'Sessions' },
     { href: '/agents', label: 'Agents' },
+    { href: '/sessions', label: 'Sessions' },
+    { href: '/topology', label: 'Topology' },
+    { href: '/alerts', label: 'Alerts', showUnread: true },
     { href: '/scan', label: 'Scan Report' },
     { href: '/risk', label: 'Risk Dashboard' },
     { href: '/attacks', label: 'Attack Paths' },
-  ]
+  ] as const
 
   return (
     <nav className="sidebar">
@@ -67,15 +73,26 @@ function Sidebar() {
       ))}
 
       <div className="sidebar-section-label">Security</div>
-      {navItems.slice(3).map(item => (
-        <Link
-          key={item.href}
-          to={item.href}
-          className={`nav-link${location.pathname === item.href || location.pathname.startsWith(item.href + '/') ? ' active' : ''}`}
-        >
-          {item.label}
-        </Link>
-      ))}
+      {navItems.slice(3).map(item => {
+        const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
+        const showBadge = 'showUnread' in item && item.showUnread && unreadCount > 0
+        return (
+          <Link
+            key={item.href}
+            to={item.href}
+            className={`nav-link${isActive ? ' active' : ''}`}
+          >
+            <span className="nav-link-label">{item.label}</span>
+            {showBadge && (
+              <span
+                className="nav-unread-dot"
+                aria-label={`${unreadCount} unread alerts`}
+                title={`${unreadCount} unread`}
+              />
+            )}
+          </Link>
+        )
+      })}
 
       <div className="sidebar-footer">
         <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
@@ -93,16 +110,19 @@ function App() {
     <BrowserRouter>
       <ThemeProvider>
       <ProjectProvider>
+        <ToastProvider>
+        <ViolationsProvider>
         <div className="layout">
           <a href="#main-content" className="sr-only">Skip to main content</a>
           <Sidebar />
           <main id="main-content" className="main-content">
             <Routes>
-              <Route path="/" element={<Navigate to="/topology" replace />} />
+              <Route path="/" element={<Navigate to="/agents" replace />} />
               <Route path="/topology" element={<TopologyGraph />} />
               <Route path="/sessions" element={<Sessions />} />
               <Route path="/sessions/:traceId" element={<TraceDetail />} />
               <Route path="/agents" element={<Agents />} />
+              <Route path="/alerts" element={<Alerts />} />
               <Route path="/risk" element={<RiskDashboard />} />
               <Route path="/attacks" element={<AttackPaths />} />
               <Route path="/setup" element={<SetupPage />} />
@@ -110,6 +130,8 @@ function App() {
             </Routes>
           </main>
         </div>
+        </ViolationsProvider>
+        </ToastProvider>
       </ProjectProvider>
       </ThemeProvider>
     </BrowserRouter>
