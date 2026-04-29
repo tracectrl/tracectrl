@@ -135,7 +135,7 @@
       data-width="1920"
       data-height="1080"
       data-start="0"
-      data-duration="9"
+      data-duration="14"
     >
       <audio id="narration" data-start="0.4" data-duration="9" data-track-index="3" src="narration-3.mp3" data-volume="1"></audio>
 
@@ -212,9 +212,9 @@
         // Red glow intensifies behind card
         tl.to('#bg-glow-el', { background: 'radial-gradient(circle, rgba(252,4,4,0.22) 0%, rgba(252,4,4,0) 70%)', duration: 0.8, ease: 'power2.out' }, 7.5);
 
-        // ── Final fade (last scene) ──────────────────────────
-        tl.to('#scene1', { opacity: 0, duration: 0.4, ease: 'sine.inOut' }, 8.4);
-        tl.set('#scene1', { visibility: 'hidden' }, 8.8);
+        // ── Final fade (last scene) — after 5s pause post-audio ──
+        tl.to('#scene1', { opacity: 0, duration: 0.5, ease: 'sine.inOut' }, 13.2);
+        tl.set('#scene1', { visibility: 'hidden' }, 13.7);
 
         // ── Captions ─────────────────────────────────────────
         var GROUPS = [
