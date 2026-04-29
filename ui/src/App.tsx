@@ -8,6 +8,7 @@ import AttackPaths from './pages/AttackPaths'
 import ScanReport from './pages/ScanReport'
 import SetupPage from './pages/SetupPage'
 import Alerts from './pages/Alerts'
+import Guardrails from './pages/Guardrails'
 import { ProjectProvider, useProject } from './context/ProjectContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { ToastProvider } from './components/ToastProvider'
@@ -25,6 +26,7 @@ function Sidebar() {
     { href: '/sessions', label: 'Sessions' },
     { href: '/topology', label: 'Topology' },
     { href: '/alerts', label: 'Alerts', showUnread: true },
+    { href: '/guardrails', label: 'Guardrails' },
     { href: '/scan', label: 'Scan Report' },
     { href: '/risk', label: 'Risk Dashboard' },
     { href: '/attacks', label: 'Attack Paths' },
@@ -123,6 +125,7 @@ function App() {
               <Route path="/sessions/:traceId" element={<TraceDetail />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/alerts" element={<Alerts />} />
+              <Route path="/guardrails" element={<Guardrails />} />
               <Route path="/risk" element={<RiskDashboard />} />
               <Route path="/attacks" element={<AttackPaths />} />
               <Route path="/setup" element={<SetupPage />} />

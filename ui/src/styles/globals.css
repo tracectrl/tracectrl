@@ -4435,3 +4435,167 @@ h4 {
   max-height: 320px;
   overflow: auto;
 }
+
+/* === MVP4.5: Guardrail Registry === */
+
+/* Page layout */
+.guardrails-page { display: flex; flex-direction: column; gap: var(--space-4); }
+.guardrails-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.guardrails-groups { display: flex; flex-direction: column; gap: var(--space-6); }
+.guardrails-group { display: flex; flex-direction: column; gap: var(--space-3); }
+.guardrails-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--gray-800);
+}
+.guardrails-group-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--gray-200);
+}
+.guardrails-group-count {
+  font-size: 12px;
+  color: var(--gray-500);
+  background: var(--gray-800);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.guardrails-list { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* Guardrail card */
+.guardrail-card {
+  position: relative;
+  background: var(--dark-card);
+  border: 1px solid var(--gray-800);
+  border-left: 3px solid var(--gray-700);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.guardrail-card-critical { border-left-color: var(--risk-critical); }
+.guardrail-card-high     { border-left-color: var(--risk-high); }
+.guardrail-card-medium   { border-left-color: var(--risk-medium); }
+.guardrail-card-low      { border-left-color: var(--risk-low); }
+
+.guardrail-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.guardrail-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-100);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guardrail-sev {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.guardrail-sev.sev-critical { color: var(--risk-critical); background: rgba(255,77,77,0.12); }
+.guardrail-sev.sev-high     { color: var(--risk-high);     background: rgba(255,107,53,0.12); }
+.guardrail-sev.sev-medium   { color: var(--risk-medium);   background: rgba(255,187,0,0.12); }
+.guardrail-sev.sev-low      { color: var(--risk-low);      background: rgba(34,197,94,0.12); }
+
+.guardrail-card-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gray-300);
+  margin: 0;
+}
+
+.guardrail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.guardrail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--gray-800);
+  background: color-mix(in srgb, var(--gray-800) 30%, transparent);
+  color: var(--gray-300);
+}
+.guardrail-chip-icon { font-size: 11px; line-height: 1; }
+.guardrail-chip-mode.mode-monitoring { color: var(--gray-200); }
+.guardrail-chip-mode.mode-blocking {
+  color: var(--risk-critical);
+  border-color: color-mix(in srgb, var(--risk-critical) 35%, transparent);
+  background: rgba(255,77,77,0.10);
+}
+.guardrail-chip-health.health-active   { color: var(--risk-low); }
+.guardrail-chip-health.health-error    { color: var(--risk-critical); }
+.guardrail-chip-health.health-disabled { color: var(--gray-500); }
+.guardrail-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.guardrail-health-dot.dot-active   { background: var(--risk-low); box-shadow: 0 0 6px rgba(34,197,94,0.6); }
+.guardrail-health-dot.dot-error    { background: var(--risk-critical); box-shadow: 0 0 6px rgba(255,77,77,0.6); }
+.guardrail-health-dot.dot-disabled { background: var(--gray-500); }
+
+.guardrail-chip-activity.is-warn {
+  color: var(--risk-medium);
+  border-color: color-mix(in srgb, var(--risk-medium) 35%, transparent);
+  background: rgba(255,187,0,0.10);
+}
+
+.guardrail-card-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 11px;
+  color: var(--gray-500);
+  flex-wrap: wrap;
+}
+.guardrail-card-foot-sep { opacity: 0.6; }
+
+/* Guardrails tab list inside AgentDetailPanel */
+.guardrails-tab-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* AgentCard shield chip */
+.agent-stat-guardrails .agent-stat-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--risk-low);
+}
+.agent-stat-shield {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Light-theme adjustments */
+[data-theme="light"] .guardrail-card-name { color: var(--gray-900); }
+[data-theme="light"] .guardrails-group-head { border-bottom-color: var(--gray-200); }
+[data-theme="light"] .guardrails-group-count { background: var(--gray-200); color: var(--gray-700); }

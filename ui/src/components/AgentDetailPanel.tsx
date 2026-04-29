@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import Drawer, { DrawerClose } from './shared/Drawer'
 import { AgentSummary, AgentTool, fetchAgentTools } from '../api/agents'
+import { fetchAgentGuardrails, GuardrailRegistration } from '../api/guardrails'
+import GuardrailCard from './GuardrailCard'
 
 interface Props {
   agent: AgentSummary | null
@@ -8,13 +10,15 @@ interface Props {
   placement?: 'right' | 'bottom'
 }
 
-type Tab = 'overview' | 'prompt' | 'tools'
+type Tab = 'overview' | 'prompt' | 'tools' | 'guardrails'
 
 export default function AgentDetailPanel({ agent, onClose, placement = 'right' }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
   const [tools, setTools] = useState<AgentTool[]>([])
   const [toolsLoading, setToolsLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [guardrails, setGuardrails] = useState<GuardrailRegistration[]>([])
+  const [guardrailsLoading, setGuardrailsLoading] = useState(false)
 
   useEffect(() => {
     if (!agent) return
@@ -24,6 +28,12 @@ export default function AgentDetailPanel({ agent, onClose, placement = 'right' }
       .then(setTools)
       .catch(() => setTools([]))
       .finally(() => setToolsLoading(false))
+
+    setGuardrailsLoading(true)
+    fetchAgentGuardrails(agent.agent_id)
+      .then(setGuardrails)
+      .catch(() => setGuardrails([]))
+      .finally(() => setGuardrailsLoading(false))
   }, [agent])
 
   const handleCopyPrompt = () => {
@@ -82,7 +92,7 @@ export default function AgentDetailPanel({ agent, onClose, placement = 'right' }
           </header>
 
           <div className="drawer-tabs" role="tablist">
-            {(['overview', 'prompt', 'tools'] as Tab[]).map(t => (
+            {(['overview', 'prompt', 'tools', 'guardrails'] as Tab[]).map(t => (
               <button
                 key={t}
                 role="tab"
@@ -93,6 +103,7 @@ export default function AgentDetailPanel({ agent, onClose, placement = 'right' }
                 {t === 'overview' && 'Overview'}
                 {t === 'prompt' && 'System Prompt'}
                 {t === 'tools' && `Tools (${agent.tools_observed.length})`}
+                {t === 'guardrails' && `Guardrails (${guardrails.length})`}
               </button>
             ))}
           </div>
@@ -167,6 +178,29 @@ export default function AgentDetailPanel({ agent, onClose, placement = 'right' }
                       For OpenClaw: enable <code>captureContent.systemPrompt</code> in the gateway config.
                     </p>
                   </div>
+                )}
+              </div>
+            )}
+
+            {tab === 'guardrails' && (
+              <div className="guardrails-tab-list">
+                {guardrailsLoading ? (
+                  <div>
+                    {[...Array(2)].map((_, i) => (
+                      <div key={i} className="loading-skeleton" style={{ height: 110, marginBottom: 8 }} />
+                    ))}
+                  </div>
+                ) : guardrails.length === 0 ? (
+                  <div className="empty-pane">
+                    <p>No guardrails registered for this agent.</p>
+                    <p className="text-muted">
+                      Wrap the agent with <code>register_guardrails(...)</code> in your SDK init to see them here.
+                    </p>
+                  </div>
+                ) : (
+                  guardrails.map(g => (
+                    <GuardrailCard key={`${g.agent_id}/${g.guardrail_name}`} guardrail={g} />
+                  ))
                 )}
               </div>
             )}

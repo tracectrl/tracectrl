@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { fetchAgentList, AgentSummary } from '../api/agents'
+import { fetchGuardrails } from '../api/guardrails'
 import EmptyState from '../components/shared/EmptyState'
 import ErrorBanner from '../components/shared/ErrorBanner'
 import AgentDetailPanel from '../components/AgentDetailPanel'
@@ -11,6 +12,7 @@ export default function Agents() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<AgentSummary | null>(null)
+  const [guardrailCounts, setGuardrailCounts] = useState<Record<string, number>>({})
 
   useEffect(() => { document.title = 'Agents — TraceCtrl' }, [])
 
@@ -21,6 +23,16 @@ export default function Agents() {
       .then(setAgents)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
+    // Bulk-fetch guardrails so each card can show a shield chip without N+1.
+    fetchGuardrails()
+      .then(list => {
+        const counts: Record<string, number> = {}
+        for (const g of list) {
+          counts[g.agent_id] = (counts[g.agent_id] ?? 0) + 1
+        }
+        setGuardrailCounts(counts)
+      })
+      .catch(() => setGuardrailCounts({}))
   }, [selectedProject])
 
   useEffect(() => { load() }, [load])
@@ -143,6 +155,18 @@ export default function Agents() {
                         <span className="agent-stat-value mono">{agent.run_count}</span>
                         <span className="agent-stat-label">runs</span>
                       </div>
+                      {(guardrailCounts[agent.agent_id] ?? 0) > 0 && (
+                        <div
+                          className="agent-stat agent-stat-guardrails"
+                          title={`${guardrailCounts[agent.agent_id]} guardrail${guardrailCounts[agent.agent_id] === 1 ? '' : 's'} registered`}
+                        >
+                          <span className="agent-stat-value mono">
+                            <span className="agent-stat-shield" aria-hidden="true">🛡</span>
+                            {guardrailCounts[agent.agent_id]}
+                          </span>
+                          <span className="agent-stat-label">guards</span>
+                        </div>
+                      )}
                     </div>
                     <div className="agent-card-foot text-muted">
                       Last seen {formatRelative(agent.last_seen)}
