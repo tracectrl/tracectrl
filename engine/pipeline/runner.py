@@ -4,6 +4,7 @@ import logging
 from engine.db.spans import fetch_all_spans
 from engine.db.inventory import update_agent_inventory
 from engine.db.topology import update_topology
+from engine.db.violations import update_violations
 from engine.pipeline.attack_graph_runner import run_attack_graph
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ def run_pipeline():
         logger.info(f"Processing {len(spans)} total spans.")
         update_agent_inventory(spans)
         update_topology(spans)
+        update_violations(spans)
 
         # Run attack graph analysis
         run_attack_graph()
