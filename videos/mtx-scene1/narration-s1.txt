@@ -1,0 +1,5 @@
+AI agents are making real decisions — processing invoices, verifying vendors, executing payments. But when something goes wrong inside that chain, who's watching?
+
+TraceCtrl gives you agentic observability. See every agent. Trace every decision. Alert on every anomaly.
+
+Today we're using FinFlow — an AI-powered invoice processing platform built on AWS Strands. An invoice arrives at the system. The Orchestrator agent coordinates the entire flow. DocAI parses the document — extracting vendor details, amounts, and line items. PolicyAgent validates the invoice against your company's financial controls. VendorIntel researches the vendor online — checking legitimacy and compliance signals. RiskAgent runs the invoice through sanctions databases via an MCP tool. And PaymentAgent executes the payment. Six agents. One pipeline. A realistic enterprise workflow — and a very real attack surface.

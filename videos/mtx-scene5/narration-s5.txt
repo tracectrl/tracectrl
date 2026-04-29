@@ -1,0 +1,1 @@
+This is the control TraceCtrl gives you. One setting. Switch the guardrail to block — now that same attack path gets terminated before PaymentAgent ever runs. Your agents. Your rules. Enforced in real time. That's trustworthy AI.

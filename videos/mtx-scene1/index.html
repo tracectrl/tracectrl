@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #040404;
+        font-family: 'Poppins', system-ui, sans-serif;
+        color: #F5F5F5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #root { position: relative; width: 1920px; height: 1080px; }
+
+      .scene {
+        position: absolute;
+        top: 0; left: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #040404;
+      }
+      #scene2, #scene3 { opacity: 0; }
+
+      .bg-grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+        background-size: 80px 80px;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .bg-glow {
+        position: absolute;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(252,4,4,0.12) 0%, rgba(252,4,4,0) 70%);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .scene-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        width: 100%;
+        height: 100%;
+        padding: 100px 160px 140px;
+        gap: 28px;
+        box-sizing: border-box;
+        position: relative;
+        z-index: 2;
+      }
+
+      .mono-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 500;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: #FC0404;
+      }
+
+      /* ── SCENE A ── */
+      .hero-question {
+        font-size: 112px;
+        font-weight: 800;
+        line-height: 1.0;
+        letter-spacing: -0.03em;
+        color: #F5F5F5;
+        max-width: 1050px;
+      }
+      .hero-sub {
+        font-size: 26px;
+        font-weight: 400;
+        color: #8A8A8A;
+        max-width: 820px;
+        line-height: 1.65;
+      }
+
+      /* ── SCENE B ── */
+      .tracectrl-headline {
+        font-size: 68px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        color: #F5F5F5;
+        line-height: 1.1;
+        max-width: 900px;
+      }
+      .pillars-row {
+        display: flex;
+        gap: 32px;
+        width: 100%;
+        margin-top: 8px;
+      }
+      .pillar {
+        flex: 1;
+        background: #111111;
+        border: 1px solid #1A1A1A;
+        border-radius: 4px;
+        padding: 32px 36px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .pillar-word {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 38px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #FC0404;
+      }
+      .pillar-desc {
+        font-size: 18px;
+        font-weight: 400;
+        color: #8A8A8A;
+        line-height: 1.6;
+      }
+
+      /* ── SCENE C ── */
+      .arch-title {
+        font-size: 46px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: #F5F5F5;
+        line-height: 1.1;
+      }
+      .arch-meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        color: #6B6B6B;
+        letter-spacing: 0.06em;
+      }
+      .arch-diagram {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        width: 100%;
+        margin-top: 4px;
+      }
+      .invoice-node {
+        background: #0A0A0A;
+        border: 1px solid #1A1A1A;
+        border-radius: 4px;
+        padding: 18px 22px;
+        flex-shrink: 0;
+      }
+      .invoice-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 15px;
+        font-weight: 500;
+        color: #6B6B6B;
+        letter-spacing: 0.14em;
+        white-space: nowrap;
+      }
+      .connector {
+        flex: 1;
+        min-width: 28px;
+        height: 2px;
+        background: #222222;
+        transform-origin: left center;
+        flex-shrink: 1;
+      }
+      .connector.red { background: #FC0404; }
+      .agent-node {
+        background: #111111;
+        border: 1px solid #222222;
+        border-radius: 4px;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex-shrink: 0;
+        min-width: 166px;
+        position: relative;
+      }
+      .agent-node.active-node {
+        border-color: rgba(252,4,4,0.5);
+        background: #130303;
+      }
+      .agent-node.payment {
+        border-color: rgba(252,4,4,0.4);
+        background: #110303;
+      }
+      .node-tag {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #6B6B6B;
+      }
+      .node-name {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 700;
+        color: #F5F5F5;
+        white-space: nowrap;
+      }
+      .agent-node.payment .node-name { color: #FC0404; }
+      .node-role {
+        font-size: 11px;
+        color: #6B6B6B;
+        line-height: 1.4;
+        max-width: 148px;
+      }
+      .payment-glow {
+        position: absolute;
+        inset: -3px;
+        border-radius: 6px;
+        border: 1.5px solid rgba(252,4,4,0);
+        box-shadow: 0 0 0 rgba(252,4,4,0);
+        pointer-events: none;
+      }
+      .attack-tag {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 15px;
+        font-weight: 500;
+        color: #FC0404;
+        letter-spacing: 0.1em;
+        opacity: 0;
+        margin-top: 2px;
+      }
+
+      /* ── CAPTIONS ── */
+      #captions {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 1920px;
+        height: 100px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      .cap-group {
+        position: absolute;
+        bottom: 28px;
+        left: 160px;
+        right: 160px;
+        text-align: center;
+        font-size: 38px;
+        font-weight: 600;
+        color: #F5F5F5;
+        line-height: 1.3;
+        opacity: 0;
+        visibility: hidden;
+        text-shadow: 0 2px 12px rgba(0,0,0,0.9);
+      }
+      .cap-group.red-term { color: #FCBEBE; }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="mtx-scene1"
+      data-width="1920"
+      data-height="1080"
+      data-start="0"
+      data-duration="50"
+    >
+      <!-- TTS: npx hyperframes tts narration-s1.txt --voice bm_george --speed 0.85 --output narration.wav -->
+      <!-- Then: npx hyperframes transcribe narration.wav --model small.en  (to update caption timestamps) -->
+      <audio
+        id="narration"
+        data-start="0.4"
+        data-duration="auto"
+        data-track-index="3"
+        src="narration.wav"
+        data-volume="1"
+      ></audio>
+
+      <!-- SCENE A: Who's watching? (0–10s) -->
+      <div id="scene1" class="scene">
+        <div class="bg-grid"></div>
+        <div class="bg-glow" style="width:900px;height:900px;top:-120px;right:140px;"></div>
+        <div class="scene-content">
+          <div id="s1-label"    class="mono-label">AGENTIC OBSERVABILITY</div>
+          <div id="s1-question" class="hero-question">Who's watching your agents?</div>
+          <div id="s1-sub"      class="hero-sub">AI agents are making real decisions — processing invoices, verifying vendors, executing payments.</div>
+        </div>
+      </div>
+
+      <!-- SCENE B: TraceCtrl answer (10–17s) -->
+      <div id="scene2" class="scene">
+        <div class="bg-grid"></div>
+        <div class="bg-glow" style="width:800px;height:800px;bottom:-240px;left:-80px;"></div>
+        <div class="scene-content">
+          <div id="s2-label"    class="mono-label">TRACECTRL</div>
+          <div id="s2-headline" class="tracectrl-headline">Agentic observability for AI systems.</div>
+          <div id="s2-pillars"  class="pillars-row">
+            <div id="s2-p1" class="pillar">
+              <div class="pillar-word">SEE</div>
+              <div class="pillar-desc">Every agent. Every tool call. Every prompt. Complete visibility into your AI pipeline.</div>
+            </div>
+            <div id="s2-p2" class="pillar">
+              <div class="pillar-word">TRACE</div>
+              <div class="pillar-desc">End-to-end execution graphs. Understand what each agent decided and why.</div>
+            </div>
+            <div id="s2-p3" class="pillar">
+              <div class="pillar-word">ALERT</div>
+              <div class="pillar-desc">Real-time guardrails. Catch violations the moment they happen — monitor or block.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENE C: FinFlow architecture (17–50s) -->
+      <div id="scene3" class="scene">
+        <div class="bg-grid"></div>
+        <div class="bg-glow" style="width:700px;height:700px;bottom:-260px;right:320px;opacity:0.7;"></div>
+        <div class="scene-content" style="gap:16px;">
+          <div id="s3-label"    class="mono-label">DEMO PLATFORM</div>
+          <div id="s3-title"    class="arch-title">FinFlow AI — Enterprise Invoice Processing</div>
+          <div id="s3-meta"     class="arch-meta">6 agents &nbsp;·&nbsp; AWS Strands &nbsp;·&nbsp; OpenTelemetry instrumented</div>
+
+          <div id="s3-diagram" class="arch-diagram">
+            <div id="n-invoice" class="invoice-node">
+              <span class="invoice-label">INVOICE</span>
+            </div>
+            <div id="c1" class="connector"></div>
+
+            <div id="n-orch" class="agent-node">
+              <div class="node-tag">agent · 01</div>
+              <div class="node-name">Orchestrator</div>
+              <div class="node-role">Routes &amp; coordinates pipeline</div>
+            </div>
+            <div id="c2" class="connector"></div>
+
+            <div id="n-docai" class="agent-node">
+              <div class="node-tag">agent · 02</div>
+              <div class="node-name">DocAI</div>
+              <div class="node-role">Parses PDFs, extracts line items</div>
+            </div>
+            <div id="c3" class="connector"></div>
+
+            <div id="n-policy" class="agent-node">
+              <div class="node-tag">agent · 03</div>
+              <div class="node-name">PolicyAgent</div>
+              <div class="node-role">Validates financial controls</div>
+            </div>
+            <div id="c4" class="connector"></div>
+
+            <div id="n-vendor" class="agent-node">
+              <div class="node-tag">agent · 04</div>
+              <div class="node-name">VendorIntel</div>
+              <div class="node-role">Web scrapes vendor legitimacy</div>
+            </div>
+            <div id="c5" class="connector"></div>
+
+            <div id="n-risk" class="agent-node">
+              <div class="node-tag">agent · 05</div>
+              <div class="node-name">RiskAgent</div>
+              <div class="node-role">Sanctions check via MCP tool</div>
+            </div>
+            <div id="c6" class="connector red"></div>
+
+            <div id="n-payment" class="agent-node payment">
+              <div id="payment-glow" class="payment-glow"></div>
+              <div class="node-tag">agent · 06</div>
+              <div class="node-name">PaymentAgent</div>
+              <div class="node-role">Executes the transaction</div>
+            </div>
+          </div>
+
+          <div id="s3-attack-tag" class="attack-tag">▲ ALL PATHS LEAD HERE — ATTACK SURFACE</div>
+        </div>
+      </div>
+
+      <!-- CAPTIONS — timestamps estimated at bm_george 0.85x (~120 wpm) -->
+      <!-- Re-run: npx hyperframes transcribe narration.wav --model small.en  and update start/end below -->
+      <div id="captions">
+        <div class="cap-group" id="cg-0">AI agents are making real decisions —</div>
+        <div class="cap-group" id="cg-1">processing invoices, verifying vendors, executing payments.</div>
+        <div class="cap-group" id="cg-2">But when something goes wrong inside that chain,</div>
+        <div class="cap-group" id="cg-3">who's watching?</div>
+        <div class="cap-group red-term" id="cg-4">TraceCtrl gives you agentic observability.</div>
+        <div class="cap-group" id="cg-5">See every agent. Trace every decision.</div>
+        <div class="cap-group" id="cg-6">Alert on every anomaly.</div>
+        <div class="cap-group red-term" id="cg-7">Today we're using FinFlow —</div>
+        <div class="cap-group" id="cg-8">an AI-powered invoice processing platform built on AWS Strands.</div>
+        <div class="cap-group" id="cg-9">An invoice arrives at the system.</div>
+        <div class="cap-group red-term" id="cg-10">The Orchestrator agent coordinates the entire flow.</div>
+        <div class="cap-group red-term" id="cg-11">DocAI parses the document —</div>
+        <div class="cap-group" id="cg-12">extracting vendor details, amounts, and line items.</div>
+        <div class="cap-group red-term" id="cg-13">PolicyAgent validates the invoice</div>
+        <div class="cap-group" id="cg-14">against your company's financial controls.</div>
+        <div class="cap-group red-term" id="cg-15">VendorIntel researches the vendor online —</div>
+        <div class="cap-group" id="cg-16">checking legitimacy and compliance signals.</div>
+        <div class="cap-group red-term" id="cg-17">RiskAgent runs the invoice through sanctions databases</div>
+        <div class="cap-group" id="cg-18">via an MCP tool.</div>
+        <div class="cap-group red-term" id="cg-19">And PaymentAgent executes the payment.</div>
+        <div class="cap-group" id="cg-20">Six agents. One pipeline.</div>
+        <div class="cap-group" id="cg-21">A realistic enterprise workflow — and a very real attack surface.</div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      // ── SCENE A entrances ──
+      tl.from('#s1-label',    { y: 22, opacity: 0, duration: 0.45, ease: 'power3.out' }, 0.3);
+      tl.from('#s1-question', { y: 65, opacity: 0, duration: 0.75, ease: 'expo.out'   }, 0.65);
+      tl.from('#s1-sub',      { y: 30, opacity: 0, duration: 0.6,  ease: 'power2.out' }, 1.3);
+
+      // ── A → B blur crossfade at t=9.8 ──
+      var T1 = 9.8;
+      tl.to('#scene1',
+        { filter: 'blur(10px)', scale: 1.03, opacity: 0, duration: 0.5, ease: 'power2.inOut' }, T1);
+      tl.fromTo('#scene2',
+        { filter: 'blur(10px)', scale: 0.97, opacity: 0 },
+        { filter: 'blur(0px)',  scale: 1,    opacity: 1, duration: 0.5, ease: 'power2.inOut' }, T1 + 0.1);
+
+      // ── SCENE B entrances ──
+      tl.from('#s2-label',    { y: 20, opacity: 0, duration: 0.4,  ease: 'power3.out' }, T1 + 0.55);
+      tl.from('#s2-headline', { y: 50, opacity: 0, duration: 0.65, ease: 'expo.out'   }, T1 + 0.85);
+      tl.from('#s2-p1',       { x: -28, opacity: 0, duration: 0.5, ease: 'power2.out' }, T1 + 1.4);
+      tl.from('#s2-p2',       { x: -28, opacity: 0, duration: 0.5, ease: 'power2.out' }, T1 + 1.65);
+      tl.from('#s2-p3',       { x: -28, opacity: 0, duration: 0.5, ease: 'power2.out' }, T1 + 1.9);
+
+      // ── B → C blur crossfade at t=16.8 ──
+      var T2 = 16.8;
+      tl.to('#scene2',
+        { filter: 'blur(10px)', scale: 1.03, opacity: 0, duration: 0.5, ease: 'power2.inOut' }, T2);
+      tl.fromTo('#scene3',
+        { filter: 'blur(10px)', scale: 0.97, opacity: 0 },
+        { filter: 'blur(0px)',  scale: 1,    opacity: 1, duration: 0.5, ease: 'power2.inOut' }, T2 + 0.1);
+
+      // ── SCENE C: header ──
+      tl.from('#s3-label', { y: 20, opacity: 0, duration: 0.4, ease: 'power3.out' }, T2 + 0.55);
+      tl.from('#s3-title', { y: 44, opacity: 0, duration: 0.65, ease: 'expo.out'  }, T2 + 0.85);
+      tl.from('#s3-meta',  { y: 18, opacity: 0, duration: 0.5, ease: 'power2.out' }, T2 + 1.2);
+
+      // ── Architecture nodes — each synced to when narrator mentions the agent ──
+      // Estimated narration cues (bm_george 0.85x, re-check after transcribe):
+      //   Invoice arrives    → ~t=22.5
+      //   Orchestrator       → ~t=24.2
+      //   DocAI              → ~t=27.2
+      //   PolicyAgent        → ~t=30.5
+      //   VendorIntel        → ~t=33.8
+      //   RiskAgent          → ~t=37.2
+      //   PaymentAgent       → ~t=40.8
+
+      function drawNode(nodeId, connId, t) {
+        tl.from(nodeId, { x: -18, opacity: 0, duration: 0.4, ease: 'power2.out' }, t);
+        if (connId) {
+          tl.from(connId, { scaleX: 0, transformOrigin: 'left center', duration: 0.35, ease: 'power2.inOut' }, t + 0.38);
+        }
+      }
+
+      drawNode('#n-invoice', '#c1', 22.0);
+      drawNode('#n-orch',    '#c2', 23.8);
+      drawNode('#n-docai',   '#c3', 26.6);
+      drawNode('#n-policy',  '#c4', 29.8);
+      drawNode('#n-vendor',  '#c5', 33.2);
+      drawNode('#n-risk',    '#c6', 36.5);
+      drawNode('#n-payment', null,  40.2);
+
+      // PaymentAgent glow + attack label fire when narrator says "Six agents"
+      var PA = 43.0;
+      tl.to('#payment-glow', {
+        borderColor: 'rgba(252,4,4,0.65)',
+        boxShadow: '0 0 28px rgba(252,4,4,0.3)',
+        duration: 0.5, ease: 'power2.out', overwrite: 'auto'
+      }, PA);
+      tl.to('#payment-glow', {
+        boxShadow: '0 0 10px rgba(252,4,4,0.1)',
+        duration: 1.0, ease: 'sine.inOut',
+        yoyo: true, repeat: Math.floor(5 / 2.0) - 1,
+        overwrite: 'auto'
+      }, PA + 0.6);
+      tl.to('#s3-attack-tag', { opacity: 1, y: -6, duration: 0.5, ease: 'power3.out' }, PA + 0.3);
+
+      // Final fade
+      tl.to('#scene3', { opacity: 0, duration: 0.6, ease: 'sine.inOut' }, 49.2);
+      tl.set('#scene3', { visibility: 'hidden' }, 49.8);
+
+      // ── CAPTIONS ──
+      // timestamps in seconds — update after: npx hyperframes transcribe narration.wav --model small.en
+      var GROUPS = [
+        { id: 'cg-0',  start: 0.5,  end: 2.5  },
+        { id: 'cg-1',  start: 2.6,  end: 5.2  },
+        { id: 'cg-2',  start: 5.3,  end: 7.0  },
+        { id: 'cg-3',  start: 7.1,  end: 9.4  },
+        { id: 'cg-4',  start: 10.3, end: 12.0 },
+        { id: 'cg-5',  start: 12.1, end: 13.8 },
+        { id: 'cg-6',  start: 13.9, end: 15.6 },
+        { id: 'cg-7',  start: 16.9, end: 18.5 },
+        { id: 'cg-8',  start: 18.6, end: 21.4 },
+        { id: 'cg-9',  start: 21.5, end: 23.2 },
+        { id: 'cg-10', start: 23.3, end: 25.6 },
+        { id: 'cg-11', start: 25.7, end: 27.2 },
+        { id: 'cg-12', start: 27.3, end: 29.4 },
+        { id: 'cg-13', start: 29.5, end: 31.0 },
+        { id: 'cg-14', start: 31.1, end: 33.0 },
+        { id: 'cg-15', start: 33.1, end: 34.8 },
+        { id: 'cg-16', start: 34.9, end: 36.6 },
+        { id: 'cg-17', start: 36.7, end: 39.0 },
+        { id: 'cg-18', start: 39.1, end: 40.5 },
+        { id: 'cg-19', start: 40.6, end: 42.4 },
+        { id: 'cg-20', start: 42.5, end: 44.2 },
+        { id: 'cg-21', start: 44.3, end: 48.0 },
+      ];
+
+      GROUPS.forEach(function(g) {
+        var el = document.getElementById(g.id);
+        tl.set(el,  { visibility: 'visible' }, g.start);
+        tl.fromTo(el,
+          { opacity: 0, y: 8 },
+          { opacity: 1, y: 0, duration: 0.22, ease: 'power2.out' },
+          g.start
+        );
+        tl.to(el, { opacity: 0, duration: 0.12, ease: 'power2.in' }, g.end - 0.12);
+        tl.set(el, { opacity: 0, visibility: 'hidden' }, g.end);
+      });
+
+      // Caption self-lint
+      GROUPS.forEach(function(g) {
+        var el = document.getElementById(g.id);
+        if (!el) return;
+        tl.seek(g.end + 0.01);
+        var cs = window.getComputedStyle(el);
+        if (cs.opacity !== '0' && cs.visibility !== 'hidden') {
+          console.warn('[cap-lint] ' + g.id + ' still visible at t=' + (g.end + 0.01).toFixed(2));
+        }
+      });
+      tl.seek(0);
+
+      window.__timelines['mtx-scene1'] = tl;
+    </script>
+  </body>
+</html>
