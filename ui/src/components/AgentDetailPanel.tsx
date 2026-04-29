@@ -5,11 +5,12 @@ import { AgentSummary, AgentTool, fetchAgentTools } from '../api/agents'
 interface Props {
   agent: AgentSummary | null
   onClose: () => void
+  placement?: 'right' | 'bottom'
 }
 
 type Tab = 'overview' | 'prompt' | 'tools'
 
-export default function AgentDetailPanel({ agent, onClose }: Props) {
+export default function AgentDetailPanel({ agent, onClose, placement = 'right' }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
   const [tools, setTools] = useState<AgentTool[]>([])
   const [toolsLoading, setToolsLoading] = useState(false)
@@ -43,7 +44,14 @@ export default function AgentDetailPanel({ agent, onClose }: Props) {
   }
 
   return (
-    <Drawer open={!!agent} onClose={onClose} ariaLabel="Agent details" widthPx={520}>
+    <Drawer
+      open={!!agent}
+      onClose={onClose}
+      ariaLabel="Agent details"
+      widthPx={520}
+      heightPx={520}
+      placement={placement}
+    >
       {agent && (
         <>
           <header className="drawer-head">

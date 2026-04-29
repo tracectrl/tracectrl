@@ -126,15 +126,26 @@ export default function TopologyGraphPage() {
             // exactly at the trace boundary so the last node always lights up.
             (isAtMax && spanEnd === traceEnd)
       if (!inWindow) continue
-      const agentId =
-        span.attributes['tracectrl.agent.id'] ||
-        span.attributes['agno.agent.id'] ||
+      // Strands emits span names like "payment_agent.execute" / "<name>.run" /
+      // "invoke_agent <name>". Strip these suffixes and normalise to the
+      // hyphen-cased agent_id form the topology nodes use.
+      const rawName =
         span.attributes['tracectrl.agent.name'] ||
         span.attributes['agent.name'] ||
-        span.span_name.replace('.run', '')
-      if (agentId) {
-        activeIds.add(agentId)
-        activeIds.add(agentId.toLowerCase().replace(/\s+/g, '-'))
+        span.span_name
+          .replace(/\.execute$/, '')
+          .replace(/\.run$/, '')
+          .replace(/^invoke_agent /, '')
+      const explicitId =
+        span.attributes['tracectrl.agent.id'] ||
+        span.attributes['agno.agent.id'] ||
+        ''
+      const candidates = [explicitId, rawName].filter(Boolean)
+      for (const c of candidates) {
+        activeIds.add(c)
+        activeIds.add(c.toLowerCase().replace(/\s+/g, '-'))
+        activeIds.add(c.toLowerCase().replace(/_/g, '-'))
+        activeIds.add(c.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, '-'))
       }
     }
     return activeIds.size > 0 ? activeIds : undefined

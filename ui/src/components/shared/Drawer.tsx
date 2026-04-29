@@ -3,13 +3,17 @@ import { createPortal } from 'react-dom'
 
 type Tone = 'critical' | 'high' | 'medium' | 'low' | 'pass' | 'fixed' | 'neutral'
 
+type Placement = 'right' | 'bottom'
+
 interface Props {
   open: boolean
   onClose: () => void
   ariaLabel: string
   children: ReactNode
   widthPx?: number
+  heightPx?: number
   tone?: Tone
+  placement?: Placement
 }
 
 const FOCUSABLE = [
@@ -27,7 +31,9 @@ export default function Drawer({
   ariaLabel,
   children,
   widthPx = 480,
+  heightPx = 460,
   tone = 'neutral',
+  placement = 'right',
 }: Props) {
   const drawerRef = useRef<HTMLElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
@@ -84,15 +90,18 @@ export default function Drawer({
   if (!open && !drawerRef.current) return null
 
   return createPortal(
-    <div className={`drawer-root${open ? ' is-open' : ''}`} aria-hidden={!open}>
+    <div
+      className={`drawer-root drawer-root--${placement}${open ? ' is-open' : ''}`}
+      aria-hidden={!open}
+    >
       <div className="drawer-backdrop" onClick={onClose} />
       <aside
         ref={drawerRef}
-        className={`drawer tone-${tone}`}
+        className={`drawer drawer--${placement} tone-${tone}`}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        style={{ width: widthPx }}
+        style={placement === 'bottom' ? { height: heightPx } : { width: widthPx }}
       >
         {children}
       </aside>

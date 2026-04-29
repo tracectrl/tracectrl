@@ -147,7 +147,11 @@ export default function Agents() {
         </div>
       )}
 
-      <AgentDetailPanel agent={selected} onClose={() => setSelected(null)} />
+      <AgentDetailPanel
+        agent={selected}
+        onClose={() => setSelected(null)}
+        placement="bottom"
+      />
     </div>
   )
 }
