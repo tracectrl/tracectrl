@@ -2575,15 +2575,14 @@ h4 {
 .finding-drawer-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  background: transparent;
   opacity: 0;
   transition: opacity 180ms ease-out;
 }
 [data-theme="light"] .finding-drawer-backdrop {
-  background: rgba(20, 20, 20, 0.35);
+  background: transparent;
 }
-.finding-drawer-root.is-open .finding-drawer-backdrop { opacity: 1; }
+.finding-drawer-root.is-open .finding-drawer-backdrop { opacity: 0; }
 
 .finding-drawer {
   position: absolute;
@@ -2780,16 +2779,14 @@ h4 {
 .drawer-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  background: transparent;
   opacity: 0;
   transition: opacity 180ms ease-out;
 }
 [data-theme="light"] .drawer-backdrop {
-  background: rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(8px);
+  background: transparent;
 }
-.drawer-root.is-open .drawer-backdrop { opacity: 1; }
+.drawer-root.is-open .drawer-backdrop { opacity: 0; }
 
 .drawer {
   position: absolute;
