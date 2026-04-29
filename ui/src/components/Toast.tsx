@@ -24,27 +24,30 @@ export default function Toast({
   onDismiss,
 }: ToastProps) {
   return (
-    <button
-      type="button"
-      className={`toast toast-${severity} toast-${phase}`}
-      onClick={onClick}
-    >
+    <div className={`toast toast-${severity} toast-${phase}`} role="status">
       <span className="toast-accent" aria-hidden="true" />
-      <div className="toast-content">
-        <div className="toast-title">{title}</div>
-        {body && <div className="toast-body">{body}</div>}
-      </div>
+      <button
+        type="button"
+        className="toast-body-button"
+        onClick={onClick}
+        aria-label={title}
+      >
+        <div className="toast-content">
+          <div className="toast-title">{title}</div>
+          {body && <div className="toast-body">{body}</div>}
+        </div>
+      </button>
       {onDismiss && (
-        <span
+        <button
+          type="button"
           className="toast-dismiss"
-          role="presentation"
-          onClick={e => { e.stopPropagation(); onDismiss() }}
-          aria-label="Dismiss"
+          onClick={onDismiss}
+          aria-label="Dismiss notification"
         >
           ×
-        </span>
+        </button>
       )}
-    </button>
+    </div>
   )
 }
 

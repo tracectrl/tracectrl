@@ -2775,19 +2775,22 @@ h4 {
   z-index: 1100;
   pointer-events: none;
 }
-.drawer-root.is-open { pointer-events: auto; }
+/* Inspector-pane: only the drawer itself catches pointer events. The
+   sidebar, page content, and other UI stay fully clickable while the
+   drawer is open. Close via × button or Esc. */
+.drawer-root.is-open .drawer { pointer-events: auto; }
+.drawer-root.is-open .drawer-backdrop { pointer-events: none; }
 
+/* Inspector-pane mode (default): page stays fully visible.
+   The backdrop catches outside-clicks-to-close but does NOT dim the page.
+   This avoids the "modal blackout" feel and keeps the sidebar / canvas
+   readable while the user references content in the drawer. */
 .drawer-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  background: transparent;
   opacity: 0;
   transition: opacity 180ms ease-out;
-}
-[data-theme="light"] .drawer-backdrop {
-  background: rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(8px);
 }
 .drawer-root.is-open .drawer-backdrop { opacity: 1; }
 
@@ -4005,21 +4008,40 @@ h4 {
 [data-theme="light"] .topo-session-picker select { color: var(--gray-900); }
 
 /* === MVP4: Bottom-placed drawer (terminal-style) === */
-.drawer--bottom {
+/* Bottom drawer = inspector pane (VS Code terminal style).
+   Anchored to the right of the sidebar so navigation stays visible.
+   No backdrop dim — page above remains fully readable. */
+.drawer-root--bottom {
   top: auto;
-  left: 0;
+  left: var(--sidebar-width);
   right: 0;
   bottom: 0;
-  width: 100%;
+  /* Restrict the root to the bottom slot only — prevents pointer events
+     above the drawer from being intercepted, so the page stays interactive. */
+  height: auto;
+}
+.drawer-root--bottom .drawer-backdrop {
+  /* Suppress the heavy modal backdrop entirely for the bottom inspector.
+     A faint top-shadow on the drawer itself provides separation. */
+  display: none;
+}
+.drawer--bottom {
+  position: fixed;
+  top: auto;
+  left: var(--sidebar-width);
+  right: 0;
+  bottom: 0;
+  width: auto;
   max-width: none;
   border-left: none;
   border-top: 1px solid var(--dark-border);
-  box-shadow: 0 -20px 60px -20px rgba(0, 0, 0, 0.8);
+  /* Subtle elevation — shadow only; no overlay dim of the page above */
+  box-shadow: 0 -8px 24px -10px rgba(0, 0, 0, 0.55);
   transform: translateY(100%);
   transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 [data-theme="light"] .drawer--bottom {
-  box-shadow: 0 -20px 60px -20px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 -8px 24px -10px rgba(0, 0, 0, 0.12);
 }
 .drawer-root--bottom.is-open .drawer--bottom { transform: translateY(0); }
 .drawer--bottom::before {
@@ -4030,6 +4052,12 @@ h4 {
   bottom: auto;
   width: auto;
   height: 2px;
+}
+@media (max-width: 768px) {
+  .drawer-root--bottom,
+  .drawer--bottom {
+    left: 0;
+  }
 }
 
 /* === MVP4: Alerts page layout fix (defined again later in file too) === */
@@ -4060,7 +4088,9 @@ h4 {
 .toast-container {
   position: fixed;
   top: 16px;
-  right: 16px;
+  /* `right` is driven by the open-drawer offset (set on body when a right
+     drawer is open) so toasts don't sit on top of a drawer's close button. */
+  right: calc(16px + var(--right-drawer-offset, 0px));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -4068,6 +4098,7 @@ h4 {
   pointer-events: none;
   width: 360px;
   max-width: calc(100vw - 32px);
+  transition: right 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .toast {
@@ -4157,12 +4188,40 @@ h4 {
   align-items: center;
   justify-content: center;
   color: var(--gray-400);
+  background: transparent;
+  border: none;
+  font: inherit;
   font-size: 18px;
   line-height: 1;
   border-radius: 4px;
   cursor: pointer;
+  padding: 0;
 }
 .toast-dismiss:hover { color: var(--white); background: rgba(255,255,255,0.06); }
+.toast-dismiss:focus-visible { outline: 2px solid var(--red); outline-offset: 1px; }
+
+/* The toast body is the primary click target — opens the alert in /alerts.
+   It needs to be a real button for keyboard + screen reader, but visually
+   it should not look like a button (no border, no background). */
+.toast-body-button {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+.toast-body-button:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
 
 /* ── Alerts page ────────────────────────────────────────── */
 .alerts-page {
@@ -4219,6 +4278,21 @@ h4 {
 .chip-high.chip-active     { color: var(--risk-high);     border-color: var(--risk-high);     background: rgba(255,107,53,0.10); }
 .chip-medium.chip-active   { color: var(--risk-medium);   border-color: var(--risk-medium);   background: rgba(255,187,0,0.10); }
 .chip-low.chip-active      { color: var(--risk-low);      border-color: var(--risk-low);      background: rgba(34,197,94,0.10); }
+
+/* Reset/clear pill — visually distinct from a normal chip so users know
+   it's a button to clear current filters, not just another category. */
+.chip-clear {
+  color: var(--gray-200);
+  border-color: var(--gray-500);
+  background: rgba(255, 255, 255, 0.04);
+}
+.chip-clear:hover { color: var(--white); border-color: var(--gray-300); }
+.chip-clear::before {
+  content: '×';
+  margin-right: 6px;
+  font-size: 14px;
+  line-height: 1;
+}
 
 .alerts-list {
   display: flex;
