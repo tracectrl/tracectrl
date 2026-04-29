@@ -1,0 +1,642 @@
+[
+  {
+    "text": "AI",
+    "start": 0.04,
+    "end": 0.18
+  },
+  {
+    "text": "agents",
+    "start": 0.18,
+    "end": 0.74
+  },
+  {
+    "text": "are",
+    "start": 0.74,
+    "end": 1.02
+  },
+  {
+    "text": "making",
+    "start": 1.02,
+    "end": 1.58
+  },
+  {
+    "text": "real",
+    "start": 1.58,
+    "end": 1.9
+  },
+  {
+    "text": "decisions,",
+    "start": 1.9,
+    "end": 2.88
+  },
+  {
+    "text": "processing",
+    "start": 2.93,
+    "end": 3.43
+  },
+  {
+    "text": "invoices,",
+    "start": 3.5,
+    "end": 4.48
+  },
+  {
+    "text": "verifying",
+    "start": 4.51,
+    "end": 5.12
+  },
+  {
+    "text": "vendors,",
+    "start": 5.12,
+    "end": 5.63
+  },
+  {
+    "text": "executing",
+    "start": 5.76,
+    "end": 6.28
+  },
+  {
+    "text": "payments.",
+    "start": 6.28,
+    "end": 6.86
+  },
+  {
+    "text": "But",
+    "start": 7.06,
+    "end": 7.21
+  },
+  {
+    "text": "when",
+    "start": 7.21,
+    "end": 7.46
+  },
+  {
+    "text": "something",
+    "start": 7.46,
+    "end": 8.03
+  },
+  {
+    "text": "goes",
+    "start": 8.03,
+    "end": 8.21
+  },
+  {
+    "text": "wrong",
+    "start": 8.29,
+    "end": 8.6
+  },
+  {
+    "text": "inside",
+    "start": 8.6,
+    "end": 8.92
+  },
+  {
+    "text": "that",
+    "start": 8.99,
+    "end": 9.23
+  },
+  {
+    "text": "chain",
+    "start": 9.23,
+    "end": 9.48
+  },
+  {
+    "text": "who's",
+    "start": 9.84,
+    "end": 9.99
+  },
+  {
+    "text": "watching,",
+    "start": 9.99,
+    "end": 10.75
+  },
+  {
+    "text": "trace",
+    "start": 10.75,
+    "end": 10.96
+  },
+  {
+    "text": "control",
+    "start": 11.02,
+    "end": 11.26
+  },
+  {
+    "text": "gives",
+    "start": 11.53,
+    "end": 11.74
+  },
+  {
+    "text": "you",
+    "start": 11.78,
+    "end": 11.98
+  },
+  {
+    "text": "agentic",
+    "start": 11.98,
+    "end": 12.54
+  },
+  {
+    "text": "observability.",
+    "start": 12.54,
+    "end": 13.86
+  },
+  {
+    "text": "See",
+    "start": 13.9,
+    "end": 14.1
+  },
+  {
+    "text": "every",
+    "start": 14.1,
+    "end": 14.5
+  },
+  {
+    "text": "agent,",
+    "start": 14.5,
+    "end": 15.05
+  },
+  {
+    "text": "trace",
+    "start": 15.13,
+    "end": 15.46
+  },
+  {
+    "text": "every",
+    "start": 15.46,
+    "end": 15.86
+  },
+  {
+    "text": "decision,",
+    "start": 15.86,
+    "end": 16.66
+  },
+  {
+    "text": "alert",
+    "start": 16.78,
+    "end": 17.06
+  },
+  {
+    "text": "on",
+    "start": 17.06,
+    "end": 17.22
+  },
+  {
+    "text": "every",
+    "start": 17.22,
+    "end": 17.62
+  },
+  {
+    "text": "anomaly.",
+    "start": 17.62,
+    "end": 18.46
+  },
+  {
+    "text": "Today",
+    "start": 18.5,
+    "end": 18.86
+  },
+  {
+    "text": "we're",
+    "start": 18.86,
+    "end": 19.26
+  },
+  {
+    "text": "using",
+    "start": 19.26,
+    "end": 19.65
+  },
+  {
+    "text": "FinFlow,",
+    "start": 19.73,
+    "end": 20.38
+  },
+  {
+    "text": "an",
+    "start": 20.43,
+    "end": 20.54
+  },
+  {
+    "text": "AI-powered",
+    "start": 20.54,
+    "end": 20.92
+  },
+  {
+    "text": "invoice",
+    "start": 21.39,
+    "end": 21.89
+  },
+  {
+    "text": "processing",
+    "start": 21.96,
+    "end": 22.69
+  },
+  {
+    "text": "platform",
+    "start": 22.97,
+    "end": 23.34
+  },
+  {
+    "text": "built",
+    "start": 23.34,
+    "end": 23.74
+  },
+  {
+    "text": "on",
+    "start": 23.74,
+    "end": 23.9
+  },
+  {
+    "text": "AWS",
+    "start": 23.9,
+    "end": 24.09
+  },
+  {
+    "text": "strands.",
+    "start": 24.22,
+    "end": 25.3
+  },
+  {
+    "text": "An",
+    "start": 25.48,
+    "end": 25.6
+  },
+  {
+    "text": "invoice",
+    "start": 25.6,
+    "end": 26.18
+  },
+  {
+    "text": "arrives",
+    "start": 26.18,
+    "end": 26.76
+  },
+  {
+    "text": "at",
+    "start": 26.76,
+    "end": 26.92
+  },
+  {
+    "text": "the",
+    "start": 26.92,
+    "end": 27.17
+  },
+  {
+    "text": "system.",
+    "start": 27.17,
+    "end": 27.9
+  },
+  {
+    "text": "The",
+    "start": 27.98,
+    "end": 28.15
+  },
+  {
+    "text": "orchestrator",
+    "start": 28.15,
+    "end": 28.99
+  },
+  {
+    "text": "agent",
+    "start": 28.99,
+    "end": 29.34
+  },
+  {
+    "text": "coordinates",
+    "start": 29.34,
+    "end": 30.11
+  },
+  {
+    "text": "the",
+    "start": 30.11,
+    "end": 30.32
+  },
+  {
+    "text": "entire",
+    "start": 30.32,
+    "end": 30.41
+  },
+  {
+    "text": "flow.",
+    "start": 30.86,
+    "end": 31.2
+  },
+  {
+    "text": "DocAI",
+    "start": 31.3,
+    "end": 31.71
+  },
+  {
+    "text": "passes",
+    "start": 31.71,
+    "end": 32.25
+  },
+  {
+    "text": "the",
+    "start": 32.25,
+    "end": 32.45
+  },
+  {
+    "text": "document,",
+    "start": 32.53,
+    "end": 33.42
+  },
+  {
+    "text": "extracting",
+    "start": 33.42,
+    "end": 34.32
+  },
+  {
+    "text": "vendor",
+    "start": 34.32,
+    "end": 34.86
+  },
+  {
+    "text": "details,",
+    "start": 34.86,
+    "end": 35.51
+  },
+  {
+    "text": "amounts,",
+    "start": 35.77,
+    "end": 36.48
+  },
+  {
+    "text": "and",
+    "start": 36.48,
+    "end": 36.75
+  },
+  {
+    "text": "line",
+    "start": 36.75,
+    "end": 37.09
+  },
+  {
+    "text": "items.",
+    "start": 37.15,
+    "end": 37.9
+  },
+  {
+    "text": "Policy",
+    "start": 37.94,
+    "end": 38.33
+  },
+  {
+    "text": "agent",
+    "start": 38.33,
+    "end": 38.69
+  },
+  {
+    "text": "validates",
+    "start": 38.69,
+    "end": 39.33
+  },
+  {
+    "text": "the",
+    "start": 39.33,
+    "end": 39.54
+  },
+  {
+    "text": "invoice",
+    "start": 39.54,
+    "end": 40.04
+  },
+  {
+    "text": "against",
+    "start": 40.04,
+    "end": 40.36
+  },
+  {
+    "text": "your",
+    "start": 40.81,
+    "end": 40.82
+  },
+  {
+    "text": "company's",
+    "start": 40.83,
+    "end": 41.46
+  },
+  {
+    "text": "financial",
+    "start": 41.46,
+    "end": 42.1
+  },
+  {
+    "text": "controls.",
+    "start": 42.1,
+    "end": 42.94
+  },
+  {
+    "text": "Vendor",
+    "start": 42.98,
+    "end": 43.39
+  },
+  {
+    "text": "Intel",
+    "start": 43.39,
+    "end": 43.76
+  },
+  {
+    "text": "researches",
+    "start": 43.76,
+    "end": 44.51
+  },
+  {
+    "text": "the",
+    "start": 44.51,
+    "end": 44.73
+  },
+  {
+    "text": "vendor",
+    "start": 44.73,
+    "end": 45.18
+  },
+  {
+    "text": "online,",
+    "start": 45.18,
+    "end": 45.78
+  },
+  {
+    "text": "checking",
+    "start": 45.87,
+    "end": 46.37
+  },
+  {
+    "text": "legitimacy",
+    "start": 46.44,
+    "end": 47.13
+  },
+  {
+    "text": "and",
+    "start": 47.13,
+    "end": 47.18
+  },
+  {
+    "text": "compliance",
+    "start": 47.45,
+    "end": 48.1
+  },
+  {
+    "text": "signals.",
+    "start": 48.1,
+    "end": 48.9
+  },
+  {
+    "text": "Risk",
+    "start": 48.94,
+    "end": 49.25
+  },
+  {
+    "text": "agent",
+    "start": 49.25,
+    "end": 49.69
+  },
+  {
+    "text": "runs",
+    "start": 49.69,
+    "end": 50.04
+  },
+  {
+    "text": "the",
+    "start": 50.04,
+    "end": 50.3
+  },
+  {
+    "text": "invoice",
+    "start": 50.3,
+    "end": 50.91
+  },
+  {
+    "text": "through",
+    "start": 50.91,
+    "end": 51.36
+  },
+  {
+    "text": "sanctions",
+    "start": 51.82,
+    "end": 52.31
+  },
+  {
+    "text": "databases",
+    "start": 52.31,
+    "end": 53.1
+  },
+  {
+    "text": "via",
+    "start": 53.1,
+    "end": 53.14
+  },
+  {
+    "text": "an",
+    "start": 53.41,
+    "end": 53.53
+  },
+  {
+    "text": "MCP",
+    "start": 53.53,
+    "end": 53.78
+  },
+  {
+    "text": "tool,",
+    "start": 53.78,
+    "end": 54.38
+  },
+  {
+    "text": "and",
+    "start": 54.38,
+    "end": 54.53
+  },
+  {
+    "text": "payment",
+    "start": 54.66,
+    "end": 54.91
+  },
+  {
+    "text": "agent",
+    "start": 54.98,
+    "end": 55.22
+  },
+  {
+    "text": "executes",
+    "start": 55.3,
+    "end": 56.61
+  },
+  {
+    "text": "the",
+    "start": 56.61,
+    "end": 57.11
+  },
+  {
+    "text": "payment.",
+    "start": 57.11,
+    "end": 58.82
+  },
+  {
+    "text": "Six",
+    "start": 58.82,
+    "end": 58.97
+  },
+  {
+    "text": "agents,",
+    "start": 58.97,
+    "end": 59.38
+  },
+  {
+    "text": "one",
+    "start": 59.38,
+    "end": 59.5
+  },
+  {
+    "text": "pipeline,",
+    "start": 59.77,
+    "end": 60.03
+  },
+  {
+    "text": "a",
+    "start": 60.03,
+    "end": 60.12
+  },
+  {
+    "text": "realistic",
+    "start": 60.12,
+    "end": 60.57
+  },
+  {
+    "text": "enterprise",
+    "start": 60.57,
+    "end": 61.16
+  },
+  {
+    "text": "workflow,",
+    "start": 61.16,
+    "end": 62.46
+  },
+  {
+    "text": "and",
+    "start": 62.46,
+    "end": 62.64
+  },
+  {
+    "text": "a",
+    "start": 62.64,
+    "end": 62.65
+  },
+  {
+    "text": "very",
+    "start": 62.65,
+    "end": 62.86
+  },
+  {
+    "text": "real",
+    "start": 62.9,
+    "end": 63.21
+  },
+  {
+    "text": "attack",
+    "start": 63.21,
+    "end": 63.73
+  },
+  {
+    "text": "surface.",
+    "start": 63.73,
+    "end": 64.61
+  }
+]

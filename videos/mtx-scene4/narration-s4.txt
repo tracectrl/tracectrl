@@ -1,0 +1,1 @@
+TraceCtrl caught it. Right here in the Alerts tab — a guardrail violation on every path leading to PaymentAgent. It flagged the anomaly, logged it, timestamped it. But look at the mode — monitor. It observed. It recorded. It did not intervene. That was our choice. And we can change it.
