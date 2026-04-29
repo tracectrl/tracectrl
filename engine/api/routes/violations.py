@@ -66,6 +66,19 @@ async def stream_violations(request: Request):
     heartbeat_interval = 15.0
 
     async def event_gen():
+        # IMPORTANT: read the watermark BEFORE fetching the init payload.
+        # Any row inserted between these two reads is both included in `init`
+        # AND picked up on the first poll, so the client receives it twice —
+        # but the client de-dupes on violation_id, so this is harmless and
+        # strictly safer than the reverse (a row inserted between init and
+        # watermark would otherwise be silently dropped if its observed_at
+        # placed it outside the top-20-by-recency cut).
+        try:
+            last_seen = get_latest_inserted_at()
+        except Exception:
+            logger.exception("violations/stream: failed to read watermark")
+            last_seen = datetime(1970, 1, 1)
+
         try:
             initial = get_violations(limit=20)
             init_payload = [_violation_to_jsonable(v) for v in initial]
@@ -73,12 +86,6 @@ async def stream_violations(request: Request):
         except Exception:
             logger.exception("violations/stream: failed to emit init payload")
             yield "event: init\ndata: []\n\n"
-
-        try:
-            last_seen = get_latest_inserted_at()
-        except Exception:
-            logger.exception("violations/stream: failed to read watermark")
-            last_seen = datetime(1970, 1, 1)
 
         last_heartbeat = asyncio.get_event_loop().time()
 

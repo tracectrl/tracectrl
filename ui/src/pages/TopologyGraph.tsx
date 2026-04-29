@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import GraphCanvas from '../components/GraphCanvas'
 import SidebarPanel from '../components/SidebarPanel'
 import PhaseReplaySlider from '../components/PhaseReplaySlider'
@@ -38,6 +38,11 @@ export default function TopologyGraphPage() {
 
   useEffect(() => { document.title = 'Topology — TraceCtrl' }, [])
 
+  // Use a ref so the "default to latest session" guard doesn't end up in load's
+  // dependency array — otherwise selectedTraceId becoming non-null would
+  // re-create load and double-fire every fetch.
+  const hasDefaultedTraceRef = useRef(false)
+
   const load = useCallback(() => {
     setError(null)
     setLoading(true)
@@ -47,14 +52,21 @@ export default function TopologyGraphPage() {
       .finally(() => setLoading(false))
     fetchAgentRisks(selectedProject).then(setAgentRisks).catch(() => {})
     fetchAgentList(selectedProject).then(setAgents).catch(() => {})
-    // Sessions feed the picker; default to latest.
     fetchSessions(selectedProject).then(list => {
       setSessions(list)
-      if (list.length > 0 && !selectedTraceId) {
+      if (list.length > 0 && !hasDefaultedTraceRef.current) {
+        hasDefaultedTraceRef.current = true
         setSelectedTraceId(list[0].trace_id)
       }
     }).catch(() => {})
-  }, [selectedProject, selectedTraceId])
+  }, [selectedProject])
+
+  // Reset the "have we defaulted yet" flag when the project changes so the new
+  // project's first session is picked up automatically.
+  useEffect(() => {
+    hasDefaultedTraceRef.current = false
+    setSelectedTraceId(null)
+  }, [selectedProject])
 
   useEffect(() => { load() }, [load])
 

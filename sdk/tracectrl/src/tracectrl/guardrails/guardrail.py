@@ -53,11 +53,13 @@ class Guardrail:
             self._tracer = trace.get_tracer("tracectrl.guardrails")
         return self._tracer
 
-    def evaluate(self, text: str) -> JudgeResult:
+    def evaluate(self, text: str, agent_id: str | None = None, agent_name: str | None = None) -> JudgeResult:
         """Run the judge against `text` and emit a guardrail evaluation span.
 
         The span is started inside the context of the current active span,
         so it links naturally to the agent run span the engine will scan.
+        `agent_id` / `agent_name` are stamped on the span so the engine can
+        attribute the violation back to the right agent in the Alerts UI.
         """
         tracer = self._tracer_lazy()
         # Format judge prompt; support both {output} and {input} placeholders.
@@ -80,6 +82,13 @@ class Guardrail:
                 "tracectrl.guardrail.evaluated_at",
                 datetime.now(timezone.utc).isoformat(),
             )
+            # Engine reads tracectrl.agent.id off the eval span to populate
+            # `agent_id` on the violation row. Without these the Alerts UI
+            # can't link a violation back to its agent.
+            if agent_id:
+                span.set_attribute("tracectrl.agent.id", agent_id)
+            if agent_name:
+                span.set_attribute("tracectrl.agent.name", agent_name)
 
             try:
                 result = invoke_judge(self.judge_llm, prompt)

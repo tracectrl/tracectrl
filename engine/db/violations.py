@@ -31,19 +31,39 @@ def update_violations(spans: list[dict]) -> None:
     `violation_id == eval_span_id`, so re-processing the same span on every
     pipeline tick is a no-op.
     """
-    rows = execute(
-        """
-        SELECT
-            Timestamp,
-            TraceId,
-            SpanId,
-            ParentSpanId,
-            SpanAttributes
-        FROM otel_traces
-        WHERE SpanName = 'tracectrl.guardrail.evaluation'
-          AND SpanAttributes['tracectrl.guardrail.decision'] = 'fail'
-        """
+    # Watermark: only scan otel_traces newer than the latest already-ingested
+    # violation. ReplacingMergeTree would dedupe re-inserts at read time, but
+    # without this every pipeline tick scans all guardrail spans ever emitted
+    # and writes N duplicate rows that the merge engine has to clean up.
+    # 5-minute lookback covers any clock skew between OTel collector inserts
+    # into otel_traces and our previous pipeline run.
+    cutoff_rows = execute(
+        "SELECT max(observed_at) FROM guardrail_violations FINAL"
     )
+    cutoff = None
+    if cutoff_rows and cutoff_rows[0][0]:
+        cutoff = cutoff_rows[0][0]
+
+    if cutoff:
+        rows = execute(
+            """
+            SELECT Timestamp, TraceId, SpanId, ParentSpanId, SpanAttributes
+            FROM otel_traces
+            WHERE SpanName = 'tracectrl.guardrail.evaluation'
+              AND SpanAttributes['tracectrl.guardrail.decision'] = 'fail'
+              AND Timestamp > %(cutoff)s - INTERVAL 5 MINUTE
+            """,
+            {"cutoff": cutoff},
+        )
+    else:
+        rows = execute(
+            """
+            SELECT Timestamp, TraceId, SpanId, ParentSpanId, SpanAttributes
+            FROM otel_traces
+            WHERE SpanName = 'tracectrl.guardrail.evaluation'
+              AND SpanAttributes['tracectrl.guardrail.decision'] = 'fail'
+            """
+        )
 
     if not rows:
         logger.info("update_violations: no failing guardrail spans to ingest")

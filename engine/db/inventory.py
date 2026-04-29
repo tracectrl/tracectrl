@@ -197,7 +197,7 @@ def get_agent_by_id(agent_id: str) -> dict | None:
     rows = execute(
         """
         SELECT agent_id, name, framework, role, model,
-               tools_observed, system_prompt_hash, run_count,
+               tools_observed, system_prompt, system_prompt_hash, run_count,
                observation_count, maturity, first_seen, last_seen
         FROM agent_inventory FINAL
         WHERE agent_id = %(id)s
@@ -208,7 +208,18 @@ def get_agent_by_id(agent_id: str) -> dict | None:
         return None
     columns = [
         "agent_id", "name", "framework", "role", "model",
-        "tools_observed", "system_prompt_hash", "run_count",
+        "tools_observed", "system_prompt", "system_prompt_hash", "run_count",
         "observation_count", "maturity", "first_seen", "last_seen",
     ]
-    return dict(zip(columns, rows[0]))
+    result = dict(zip(columns, rows[0]))
+    # Same edge-merge as get_all_agents: tool list authority lives in
+    # topology_tool_edges, not in agent_inventory.tools_observed.
+    edge_rows = execute(
+        "SELECT tool_name FROM topology_tool_edges FINAL WHERE agent_id = %(id)s",
+        {"id": agent_id},
+    )
+    edge_tools = {r[0] for r in edge_rows if r[0]}
+    if edge_tools:
+        existing = set(result.get("tools_observed") or [])
+        result["tools_observed"] = sorted(existing | edge_tools)
+    return result
