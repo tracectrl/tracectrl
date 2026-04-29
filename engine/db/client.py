@@ -85,6 +85,22 @@ def ensure_schema() -> None:
   profile        String DEFAULT 'L1'
 ) ENGINE = ReplacingMergeTree()
 ORDER BY (scan_id)""",
+        f"""CREATE TABLE IF NOT EXISTS {db}.guardrail_violations (
+            violation_id     String,
+            trace_id         String,
+            span_id          String,
+            eval_span_id     String,
+            agent_id         String,
+            guardrail_name   String,
+            judge_model      String,
+            decision         Enum8('pass'=0, 'fail'=1, 'error'=2),
+            reason           String,
+            evidence         String,
+            severity         Enum8('low'=0, 'medium'=1, 'high'=2, 'critical'=3),
+            observed_at      DateTime64(3, 'UTC'),
+            inserted_at      DateTime64(3, 'UTC')
+        ) ENGINE = ReplacingMergeTree()
+        ORDER BY (observed_at, violation_id)""",
     ]
     client = get_client()
     for stmt in stmts:
