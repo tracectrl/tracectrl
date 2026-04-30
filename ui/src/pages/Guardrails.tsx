@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { fetchGuardrails, GuardrailRegistration, GuardrailSeverity } from '../api/guardrails'
 import GuardrailCard from '../components/GuardrailCard'
+import GuardrailDetailDrawer from '../components/GuardrailDetailDrawer'
 import EmptyState from '../components/shared/EmptyState'
 import ErrorBanner from '../components/shared/ErrorBanner'
 
@@ -12,6 +13,7 @@ export default function Guardrails() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeSeverities, setActiveSeverities] = useState<Set<GuardrailSeverity>>(new Set())
+  const [selected, setSelected] = useState<GuardrailRegistration | null>(null)
 
   useEffect(() => { document.title = 'Guardrails — TraceCtrl' }, [])
 
@@ -125,13 +127,19 @@ export default function Guardrails() {
               </header>
               <div className="guardrails-list">
                 {items.map(g => (
-                  <GuardrailCard key={`${g.agent_id}/${g.guardrail_name}`} guardrail={g} />
+                  <GuardrailCard
+                    key={`${g.agent_id}/${g.guardrail_name}`}
+                    guardrail={g}
+                    onClick={setSelected}
+                  />
                 ))}
               </div>
             </section>
           ))}
         </div>
       )}
+
+      <GuardrailDetailDrawer guardrail={selected} onClose={() => setSelected(null)} />
     </div>
   )
 }

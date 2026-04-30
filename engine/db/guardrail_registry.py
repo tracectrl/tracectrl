@@ -7,6 +7,7 @@ them to `guardrail_registry`. ReplacingMergeTree dedupes on
 re-emitting the same registration just refreshes the row.
 """
 
+import json
 import logging
 from datetime import datetime
 from engine.db.client import execute
@@ -53,7 +54,13 @@ def update_guardrail_registry(spans: list[dict]) -> None:
     )
     cutoff = None
     if cutoff_rows and cutoff_rows[0][0]:
-        cutoff = cutoff_rows[0][0]
+        candidate = cutoff_rows[0][0]
+        # ClickHouse returns 1970-01-01 (epoch) for max() on an empty table
+        # rather than NULL. Subtracting INTERVAL 5 MINUTE from epoch underflows
+        # DateTime64 and makes the comparison silently match nothing. Treat
+        # any timestamp at or before 1970-01-02 as "table effectively empty".
+        if candidate.year > 1970:
+            cutoff = candidate
 
     if cutoff:
         rows = execute(
@@ -83,8 +90,27 @@ def update_guardrail_registry(spans: list[dict]) -> None:
         # that ReplacingMergeTree then has to merge.
         latest: dict[tuple[str, str], tuple] = {}
         for ts, attrs in rows:
-            attrs = attrs or {}
+            attrs = dict(attrs or {})
+            # The TraceCtrl SDK packs custom tracectrl.* attributes inside a
+            # `metadata` JSON blob to keep the OTel attribute count low. Merge
+            # those back into the flat attrs dict so we can read them by name.
+            if "metadata" in attrs:
+                try:
+                    extra = json.loads(attrs["metadata"])
+                    for k, v in extra.items():
+                        if k not in attrs:
+                            attrs[k] = str(v) if not isinstance(v, str) else v
+                except (json.JSONDecodeError, TypeError):
+                    pass
             agent_id = attrs.get("tracectrl.agent.id", "")
+            # Strands' Agent class defaults agent_id to "default" — that's
+            # useless for joining with topology nodes which key on name-derived
+            # ids like "orchestrator". Treat "default" / "" as missing and
+            # synthesize from the agent name instead.
+            if agent_id in ("", "default"):
+                name = attrs.get("tracectrl.agent.name", "")
+                if name:
+                    agent_id = name.lower().replace(" ", "-").replace("_", "-")
             guardrail_name = attrs.get("tracectrl.guardrail.name", "")
             if not agent_id or not guardrail_name:
                 continue
@@ -117,6 +143,7 @@ def update_guardrail_registry(spans: list[dict]) -> None:
                 timing,
                 attrs.get("tracectrl.guardrail.judge_model", ""),
                 attrs.get("tracectrl.guardrail.description", ""),
+                attrs.get("tracectrl.guardrail.judge_prompt", ""),
                 health,
                 attrs.get("tracectrl.guardrail.health_reason", ""),
                 registered_at,
@@ -125,7 +152,7 @@ def update_guardrail_registry(spans: list[dict]) -> None:
             )
             key = (agent_id, guardrail_name)
             existing = latest.get(key)
-            if existing is None or row[10] > existing[10]:
+            if existing is None or row[11] > existing[11]:
                 latest[key] = row
 
         inserts = list(latest.values())
@@ -152,14 +179,14 @@ def _apply_error_health_overrides() -> None:
     error_rows = execute(
         """
         SELECT
-            v.agent_id,
-            v.guardrail_name,
-            argMax(v.reason, v.observed_at) AS latest_reason,
+            agent_id,
+            guardrail_name,
+            argMax(reason, observed_at) AS latest_reason,
             count() AS error_count
-        FROM guardrail_violations FINAL AS v
-        WHERE v.decision = 'error'
-          AND v.observed_at > now() - INTERVAL 1 HOUR
-        GROUP BY v.agent_id, v.guardrail_name
+        FROM guardrail_violations FINAL
+        WHERE decision = 'error'
+          AND observed_at > now() - INTERVAL 1 HOUR
+        GROUP BY agent_id, guardrail_name
         """
     )
     if not error_rows:
@@ -188,7 +215,7 @@ def _apply_error_health_overrides() -> None:
         f"""
         SELECT
             agent_id, guardrail_name, severity, mode, timing,
-            judge_model, description, health, health_reason,
+            judge_model, description, judge_prompt, health, health_reason,
             registered_at, last_seen_at
         FROM guardrail_registry FINAL
         WHERE (agent_id, guardrail_name) IN ({keys_clause})
@@ -201,7 +228,7 @@ def _apply_error_health_overrides() -> None:
     now = datetime.utcnow()
     inserts = []
     for (agent_id, guardrail_name, severity, mode, timing,
-         judge_model, description, _health, _health_reason,
+         judge_model, description, judge_prompt, _health, _health_reason,
          registered_at, last_seen_at) in existing:
         reason = error_lookup.get((agent_id, guardrail_name))
         if reason is None:
@@ -214,6 +241,7 @@ def _apply_error_health_overrides() -> None:
             timing,
             judge_model,
             description,
+            judge_prompt,
             "error",
             reason,
             registered_at,
@@ -231,7 +259,7 @@ def _apply_error_health_overrides() -> None:
 
 _SELECT_COLS = (
     "agent_id, guardrail_name, severity, mode, timing, "
-    "judge_model, description, health, health_reason, "
+    "judge_model, description, judge_prompt, health, health_reason, "
     "registered_at, last_seen_at"
 )
 
@@ -245,10 +273,11 @@ def _row_to_registration(row: tuple, recent_24h: int = 0) -> dict:
         "timing": row[4],
         "judge_model": row[5],
         "description": row[6],
-        "health": row[7],
-        "health_reason": row[8],
-        "registered_at": row[9],
-        "last_seen_at": row[10],
+        "judge_prompt": row[7],
+        "health": row[8],
+        "health_reason": row[9],
+        "registered_at": row[10],
+        "last_seen_at": row[11],
         "recent_activity_24h": recent_24h,
     }
 
@@ -281,15 +310,15 @@ def get_guardrail_registry(agent_id: str | None = None) -> list[dict]:
 
     activity_rows = execute(
         f"""
-        SELECT v.agent_id, v.guardrail_name, count() AS c
-        FROM guardrail_violations FINAL AS v
-        WHERE v.observed_at > now() - INTERVAL 24 HOUR
-          AND (v.agent_id, v.guardrail_name) IN (
+        SELECT agent_id, guardrail_name, count() AS c
+        FROM guardrail_violations FINAL
+        WHERE observed_at > now() - INTERVAL 24 HOUR
+          AND (agent_id, guardrail_name) IN (
               SELECT agent_id, guardrail_name
               FROM guardrail_registry FINAL
               {where_sql}
           )
-        GROUP BY v.agent_id, v.guardrail_name
+        GROUP BY agent_id, guardrail_name
         """,
         params,
     )

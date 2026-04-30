@@ -13,6 +13,7 @@ export interface GuardrailRegistration {
   timing: GuardrailTiming
   judge_model: string
   description: string
+  judge_prompt: string
   health: GuardrailHealth
   health_reason: string
   registered_at: string

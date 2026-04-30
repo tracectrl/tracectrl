@@ -109,6 +109,7 @@ ORDER BY (scan_id)""",
             timing              Enum8('post_output'=0, 'pre_input'=1),
             judge_model         String,
             description         String,
+            judge_prompt        String,
             health              Enum8('active'=0, 'error'=1, 'disabled'=2),
             health_reason       String,
             registered_at       DateTime64(3, 'UTC'),
@@ -116,6 +117,9 @@ ORDER BY (scan_id)""",
             inserted_at         DateTime64(3, 'UTC')
         ) ENGINE = ReplacingMergeTree(last_seen_at)
         ORDER BY (agent_id, guardrail_name)""",
+        # Add column for existing deployments — IF NOT EXISTS keeps this idempotent
+        # for fresh installs (the CREATE above already includes it).
+        "ALTER TABLE tracectrl.guardrail_registry ADD COLUMN IF NOT EXISTS judge_prompt String AFTER description",
     ]
     client = get_client()
     for stmt in stmts:

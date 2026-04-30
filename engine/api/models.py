@@ -117,6 +117,7 @@ class GuardrailRegistration(BaseModel):
     timing: str          # post_output|pre_input
     judge_model: str
     description: str
+    judge_prompt: str = ""
     health: str          # active|error|disabled
     health_reason: str
     registered_at: datetime
