@@ -6,6 +6,7 @@ handled by ClickHouse via ORDER BY (observed_at, violation_id), where
 `violation_id` is the guardrail evaluation span_id.
 """
 
+import json
 import logging
 from datetime import datetime
 from engine.db.client import execute
@@ -42,26 +43,38 @@ def update_violations(spans: list[dict]) -> None:
     )
     cutoff = None
     if cutoff_rows and cutoff_rows[0][0]:
-        cutoff = cutoff_rows[0][0]
+        candidate = cutoff_rows[0][0]
+        # Same epoch-underflow trap as guardrail_registry: max() on empty
+        # ReplacingMergeTree returns 1970-01-01 (not NULL), and INTERVAL
+        # arithmetic on that underflows DateTime64. Treat as "no cutoff".
+        if candidate.year > 1970:
+            cutoff = candidate
 
+    # The TraceCtrl SDK packs custom tracectrl.* attributes inside a `metadata`
+    # JSON blob. The decision attribute will live there, NOT as a flat
+    # SpanAttribute, so we OR both forms in the filter to be safe.
+    decision_filter = (
+        "(SpanAttributes['tracectrl.guardrail.decision'] = 'fail' "
+        " OR JSONExtractString(SpanAttributes['metadata'], 'tracectrl.guardrail.decision') = 'fail')"
+    )
     if cutoff:
         rows = execute(
-            """
+            f"""
             SELECT Timestamp, TraceId, SpanId, ParentSpanId, SpanAttributes
             FROM otel_traces
             WHERE SpanName = 'tracectrl.guardrail.evaluation'
-              AND SpanAttributes['tracectrl.guardrail.decision'] = 'fail'
+              AND {decision_filter}
               AND Timestamp > %(cutoff)s - INTERVAL 5 MINUTE
             """,
             {"cutoff": cutoff},
         )
     else:
         rows = execute(
-            """
+            f"""
             SELECT Timestamp, TraceId, SpanId, ParentSpanId, SpanAttributes
             FROM otel_traces
             WHERE SpanName = 'tracectrl.guardrail.evaluation'
-              AND SpanAttributes['tracectrl.guardrail.decision'] = 'fail'
+              AND {decision_filter}
             """
         )
 
@@ -72,7 +85,16 @@ def update_violations(spans: list[dict]) -> None:
     now = datetime.utcnow()
     inserts = []
     for ts, trace_id, span_id, parent_span_id, attrs in rows:
-        attrs = attrs or {}
+        attrs = dict(attrs or {})
+        # Merge metadata-packed attrs back into the flat dict.
+        if "metadata" in attrs:
+            try:
+                extra = json.loads(attrs["metadata"])
+                for k, v in extra.items():
+                    if k not in attrs:
+                        attrs[k] = str(v) if not isinstance(v, str) else v
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         eval_span_id = span_id
         agent_run_span_id = parent_span_id or eval_span_id
@@ -85,12 +107,20 @@ def update_violations(spans: list[dict]) -> None:
         if severity not in _VALID_SEVERITIES:
             severity = "medium"
 
+        # Same Strands "default" agent_id quirk as the registry — synthesize
+        # from name when unset/default so the ID joins with topology nodes.
+        agent_id = attrs.get("tracectrl.agent.id", "")
+        if agent_id in ("", "default"):
+            name = attrs.get("tracectrl.agent.name", "")
+            if name:
+                agent_id = name.lower().replace(" ", "-").replace("_", "-")
+
         inserts.append((
             eval_span_id,                                         # violation_id
             trace_id,                                             # trace_id
             agent_run_span_id,                                    # span_id
             eval_span_id,                                         # eval_span_id
-            attrs.get("tracectrl.agent.id", ""),                  # agent_id
+            agent_id,                                             # agent_id
             attrs.get("tracectrl.guardrail.name", ""),            # guardrail_name
             attrs.get("tracectrl.guardrail.judge_model", ""),     # judge_model
             decision,                                             # decision

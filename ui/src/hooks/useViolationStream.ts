@@ -64,6 +64,10 @@ export function useViolationStream(): UseViolationStreamResult {
           setUnreadCount(c => c + 1)
           if (SEVERITY_RANK[v.severity] >= SEVERITY_RANK.high) {
             push({
+              // Use violation_id as the toast id so re-delivered events from
+              // the SSE stream don't create duplicate toasts — ToastProvider
+              // de-dupes by id.
+              id: `violation-${v.violation_id}`,
               title: `${v.severity.toUpperCase()}: ${v.guardrail_name}`,
               body: v.reason?.slice(0, 140) || `Agent ${v.agent_id} flagged`,
               severity: v.severity,

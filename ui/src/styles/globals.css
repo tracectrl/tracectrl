@@ -4102,6 +4102,8 @@ h4 {
 }
 
 .toast {
+  position: relative;          /* anchor for the absolute countdown bar */
+  overflow: hidden;            /* clip the countdown bar to the radius */
   pointer-events: auto;
   width: 100%;
   display: flex;
@@ -4122,6 +4124,30 @@ h4 {
 }
 .toast:hover { border-color: var(--gray-500); }
 .toast:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
+/* Auto-dismiss countdown bar.
+   Drains from 100% width down to 0% over --toast-duration so the user has
+   a clear sense of when it'll auto-close. The JS dismiss timer matches the
+   same duration, so the bar reaching 0 = the toast unmounting. */
+.toast-countdown {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--gray-500);
+  transform-origin: left center;
+  animation: toast-countdown-drain var(--toast-duration, 30000ms) linear forwards;
+  opacity: 0.7;
+}
+@keyframes toast-countdown-drain {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+.toast-critical .toast-countdown { background: var(--risk-critical); }
+.toast-high     .toast-countdown { background: var(--risk-high); }
+.toast-medium   .toast-countdown { background: var(--risk-medium); }
+.toast-low      .toast-countdown { background: var(--risk-low); }
 
 .toast.toast-enter {
   transform: translateX(120%);

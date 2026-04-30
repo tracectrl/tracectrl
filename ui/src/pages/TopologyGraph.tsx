@@ -128,27 +128,18 @@ export default function TopologyGraphPage() {
     return endNs - traceStartNs
   }, [replaySpans, traceStartNs])
 
-  // WS3 bug fix: zero-duration spans (agent-as-tool delegation markers in
-  // Strands sometimes produce these) were dropped by the strict `start <= ns
-  // <= end` check at the trace tail. Treat zero-duration as a small point and
-  // include them when the slider is at or past their start_ns.
+  // Cumulative-trail replay: any span that has STARTED at or before replayNs
+  // stays highlighted, even after it finishes. This solves the missed-short-
+  // span problem (payment_agent's span is only ~10ms in a 60s trace; with
+  // strict in-window matching the user has to land the slider in a 10ms
+  // window to see it light up). Trail-style replay also matches user mental
+  // model: "show me what's happened so far" beats "show me what's running
+  // RIGHT NOW" for a static trace.
   const highlightedNodeIds = useMemo(() => {
     if (replayNs === null) return undefined
-    const traceEnd = traceStartNs + traceDurationNs
-    const isAtMax = replayNs >= traceEnd
     const activeIds = new Set<string>()
     for (const span of replaySpans) {
-      const dur = span.duration_ns
-      const spanStart = span.start_ns
-      const spanEnd = spanStart + dur
-      const inWindow =
-        dur === 0
-          ? spanStart <= replayNs
-          : (spanStart <= replayNs && spanEnd >= replayNs) ||
-            // At the very end of the slider, include any span that ended
-            // exactly at the trace boundary so the last node always lights up.
-            (isAtMax && spanEnd === traceEnd)
-      if (!inWindow) continue
+      if (span.start_ns > replayNs) continue
       // Strands emits span names like "payment_agent.execute" / "<name>.run" /
       // "invoke_agent <name>". Strip these suffixes and normalise to the
       // hyphen-cased agent_id form the topology nodes use.
@@ -172,7 +163,7 @@ export default function TopologyGraphPage() {
       }
     }
     return activeIds.size > 0 ? activeIds : undefined
-  }, [replayNs, replaySpans, traceStartNs, traceDurationNs])
+  }, [replayNs, replaySpans])
 
   const agentCount = graph?.nodes.filter(n => n.type === 'agent').length ?? 0
   const toolCount = graph?.nodes.filter(n => n.type === 'tool').length ?? 0

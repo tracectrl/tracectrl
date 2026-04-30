@@ -32,7 +32,9 @@ interface ToastCtx {
 const ToastContext = createContext<ToastCtx | null>(null)
 
 const MAX_VISIBLE = 5
-const DEFAULT_DURATION = 8000
+// 30s with a visible countdown — long enough to read + click without feeling
+// rushed, short enough that an unattended demo doesn't pile up old alerts.
+const DEFAULT_DURATION = 30000
 
 export function useToast(): ToastCtx {
   const ctx = useContext(ToastContext)
@@ -47,9 +49,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback((id: string) => {
     setToasts(prev => prev.map(t => (t.id === id ? { ...t, phase: 'exit' } : t)))
-    // Remove after exit animation (220ms)
+    // Remove after exit animation (220ms). Also clear the ref entry so
+    // future push() with the same id is allowed to recreate the toast.
     const remove = window.setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
+      timeoutsRef.current.delete(id)
     }, 240)
     const existing = timeoutsRef.current.get(id)
     if (existing) window.clearTimeout(existing)
@@ -58,6 +62,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const push = useCallback((input: ToastInput): string => {
     const id = input.id ?? `toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    // Hard de-dupe: if a toast with this id is already alive, KEEP it as-is.
+    // Don't reset the timer, don't replay the entry animation, don't append.
+    // SSE may re-deliver the same violation many times; the first push wins.
+    if (timeoutsRef.current.has(id)) {
+      return id
+    }
     const item: ToastItem = {
       id,
       title: input.title,
@@ -68,15 +78,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       createdAt: Date.now(),
       phase: 'enter',
     }
-    // Clear any existing timer for this id so a re-push doesn't get torn
-    // down prematurely by the previous instance's auto-dismiss timer.
-    const existingTimer = timeoutsRef.current.get(id)
-    if (existingTimer) {
-      window.clearTimeout(existingTimer)
-      timeoutsRef.current.delete(id)
-    }
     setToasts(prev => {
-      // De-duplicate by id (re-push with same id replaces the old entry).
+      // Belt-and-suspenders: if state somehow has it but timer doesn't, drop
+      // the stale entry first.
       const filtered = prev.filter(t => t.id !== id)
       const next = [item, ...filtered]
       if (next.length > MAX_VISIBLE) return next.slice(0, MAX_VISIBLE)
@@ -118,6 +122,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               key={t.id}
               className={`toast toast-${t.severity} toast-${t.phase}`}
               role="status"
+              style={{ ['--toast-duration' as string]: `${t.durationMs}ms` }}
             >
               <span className="toast-accent" aria-hidden="true" />
               <button
@@ -139,6 +144,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               >
                 ×
               </button>
+              {/* Auto-dismiss countdown — drains from 100% to 0% over the
+                  toast's lifetime, paused on hover so users have time to
+                  read/click without losing it. */}
+              <span className="toast-countdown" aria-hidden="true" />
             </div>
           ))}
         </div>,

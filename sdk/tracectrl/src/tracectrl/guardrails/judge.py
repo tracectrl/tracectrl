@@ -1,10 +1,13 @@
 """Judge LLM invocation with structured output parsing.
 
-We force the judge into a strict JSON schema via Bedrock tool-use. Tool-use is
-the most portable "deterministic enough" path across Bedrock providers because
-`converse_stream` does not give uniform logprobs. On parse failure we re-prompt
-once; a second failure is treated as `pass=true` (we do not want a broken
-judge to spam violation alerts).
+Uses Bedrock's `converse` API directly via boto3. Strands' BedrockModel
+wraps the same API, but its public surface is async (`structured_output`)
+and the public method names have shifted between versions, so binding to
+boto3 directly is far more stable. We extract `model_id` + `region` from
+the BedrockModel object and call `bedrock-runtime.converse` ourselves.
+
+On parse failure we re-prompt once; a second failure is treated as
+`pass=true` (a broken judge must not spam violation alerts).
 """
 
 from __future__ import annotations
@@ -55,7 +58,7 @@ def invoke_judge(judge_llm: Any, prompt: str) -> JudgeResult:
             return parsed
         except Exception as exc:  # noqa: BLE001 — broad on purpose; retry once
             last_err = exc
-            logger.debug("judge attempt %d failed: %s", attempt, exc)
+            logger.warning("judge attempt %d failed: %s", attempt, exc)
             continue
 
     logger.warning(
@@ -65,13 +68,46 @@ def invoke_judge(judge_llm: Any, prompt: str) -> JudgeResult:
     return JudgeResult(passed=True, reason="judge parse failed; defaulted to pass", evidence=None)
 
 
-def _call_model(judge_llm: Any, prompt: str, *, attempt: int) -> Any:
-    """Call the judge model via tool-use. Tries a few common Strands/Bedrock shapes.
+def _resolve_bedrock_model(judge_llm: Any) -> tuple[str, str]:
+    """Pull (model_id, region) from a Strands BedrockModel or from explicit config."""
+    # Strands BedrockModel stores config in `_config` / `get_config()`.
+    config: dict = {}
+    if hasattr(judge_llm, "get_config"):
+        try:
+            cfg = judge_llm.get_config()
+            if isinstance(cfg, dict):
+                config = cfg
+        except Exception:  # noqa: BLE001
+            pass
+    if not config and hasattr(judge_llm, "config"):
+        c = judge_llm.config
+        if isinstance(c, dict):
+            config = c
+    model_id = (
+        config.get("model_id")
+        or getattr(judge_llm, "model_id", None)
+        or getattr(judge_llm, "model", None)
+    )
+    region = (
+        config.get("region_name")
+        or getattr(judge_llm, "region_name", None)
+        or "us-east-1"
+    )
+    if not model_id:
+        raise RuntimeError(f"could not extract model_id from judge_llm: {type(judge_llm).__name__}")
+    return model_id, region
 
-    The Strands `BedrockModel` API surface is still consolidating; we try a small
-    set of well-known method names rather than hard-binding to one. If none work
-    we fall back to plain text generation and parse JSON from the response.
+
+def _call_model(judge_llm: Any, prompt: str, *, attempt: int) -> Any:
+    """Call Bedrock converse with tool-use forcing the JSON schema.
+
+    boto3 is bundled with every AWS Lambda / Strands deploy; importing it lazily
+    here keeps the SDK's import-time footprint clean.
     """
+    import boto3
+
+    model_id, region = _resolve_bedrock_model(judge_llm)
+
     system = (
         "You are an automated guardrail judge. You MUST call the "
         f"`{_JUDGE_TOOL_NAME}` tool with your decision. Do not answer in plain text."
@@ -79,51 +115,32 @@ def _call_model(judge_llm: Any, prompt: str, *, attempt: int) -> Any:
     if attempt == 2:
         system += " Your previous response was not valid JSON; respond by calling the tool exactly."
 
-    tool_spec = {
-        "name": _JUDGE_TOOL_NAME,
-        "description": "Record the guardrail pass/fail decision.",
-        "input_schema": _JUDGE_TOOL_SCHEMA,
-    }
-
-    # Strategy 1: Strands BedrockModel converse-style call with tool config.
-    converse = getattr(judge_llm, "converse", None)
-    if callable(converse):
-        try:
-            return converse(
-                messages=[{"role": "user", "content": [{"text": prompt}]}],
-                system=[{"text": system}],
-                tool_config={"tools": [{"toolSpec": _to_bedrock_tool_spec(tool_spec)}]},
-            )
-        except TypeError:
-            pass  # signature mismatch — fall through
-
-    # Strategy 2: a generic `__call__` / `invoke` returning a string.
-    for method_name in ("invoke", "__call__", "generate"):
-        method = getattr(judge_llm, method_name, None)
-        if callable(method):
-            try:
-                return method(f"{system}\n\n{prompt}\n\nReturn ONLY a JSON object matching: "
-                              f"{json.dumps(_JUDGE_TOOL_SCHEMA)}")
-            except TypeError:
-                continue
-
-    raise RuntimeError(f"unsupported judge_llm type: {type(judge_llm).__name__}")
-
-
-def _to_bedrock_tool_spec(tool: dict) -> dict:
-    """Translate our tool spec into Bedrock converse tool shape."""
-    return {
-        "name": tool["name"],
-        "description": tool["description"],
-        "inputSchema": {"json": tool["input_schema"]},
-    }
+    client = boto3.client("bedrock-runtime", region_name=region)
+    response = client.converse(
+        modelId=model_id,
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        system=[{"text": system}],
+        toolConfig={
+            "tools": [{
+                "toolSpec": {
+                    "name": _JUDGE_TOOL_NAME,
+                    "description": "Record the guardrail pass/fail decision.",
+                    "inputSchema": {"json": _JUDGE_TOOL_SCHEMA},
+                }
+            }],
+            # `any` forces the model to call SOME tool; combined with a single
+            # tool in the list this guarantees we get our schema back.
+            "toolChoice": {"any": {}},
+        },
+    )
+    return response
 
 
 def _parse_judge_response(raw: Any) -> JudgeResult:
-    """Extract the structured decision from whatever shape the judge returned."""
+    """Extract the structured decision from a Bedrock converse response."""
     payload: Optional[dict] = None
 
-    # Bedrock converse response shape.
+    # Bedrock converse response shape: {output: {message: {content: [{toolUse: {input: {...}}}]}}}
     if isinstance(raw, dict):
         output = raw.get("output") or {}
         message = output.get("message") if isinstance(output, dict) else None
@@ -133,6 +150,7 @@ def _parse_judge_response(raw: Any) -> JudgeResult:
                     payload = block["toolUse"].get("input")
                     break
         if payload is None:
+            # Some intermediaries flatten this — try direct keys.
             payload = raw.get("input") or raw.get("toolUse", {}).get("input")
 
     # Plain text fallback — try to find a JSON object in the string.

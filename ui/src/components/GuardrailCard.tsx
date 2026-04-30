@@ -2,6 +2,7 @@ import { GuardrailRegistration } from '../api/guardrails'
 
 interface Props {
   guardrail: GuardrailRegistration
+  onClick?: (g: GuardrailRegistration) => void
 }
 
 function formatRelative(iso: string): string {
@@ -20,12 +21,25 @@ function truncate(s: string, max = 100): string {
   return s.slice(0, max - 1).trimEnd() + '…'
 }
 
-export default function GuardrailCard({ guardrail: g }: Props) {
+export default function GuardrailCard({ guardrail: g, onClick }: Props) {
   const severityClass = `guardrail-card-${g.severity}`
   const activityWarn = g.recent_activity_24h > 0
+  const interactive = !!onClick
 
   return (
-    <div className={`guardrail-card ${severityClass}`}>
+    <div
+      className={`guardrail-card ${severityClass}${interactive ? ' is-interactive' : ''}`}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? `Open ${g.guardrail_name} details` : undefined}
+      onClick={interactive ? () => onClick!(g) : undefined}
+      onKeyDown={interactive ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick!(g)
+        }
+      } : undefined}
+    >
       <div className="guardrail-card-head">
         <div className="guardrail-card-name" title={g.guardrail_name}>
           {g.guardrail_name}
