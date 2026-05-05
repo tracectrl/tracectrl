@@ -21,6 +21,9 @@ export function useViolationStream(): UseViolationStreamResult {
   const retryRef = useRef(0)
   const retryTimerRef = useRef<number | null>(null)
   const closedRef = useRef(false)
+  // Tracks every violation_id that has ever had a toast shown this session.
+  // Survives SSE reconnects so re-delivered events never produce duplicate toasts.
+  const shownToastIds = useRef(new Set<string>())
 
   const markAllRead = useCallback(() => setUnreadCount(0), [])
 
@@ -46,7 +49,13 @@ export function useViolationStream(): UseViolationStreamResult {
       es.addEventListener('init', (ev: MessageEvent) => {
         try {
           const data = JSON.parse(ev.data) as Violation[]
-          setViolations(Array.isArray(data) ? data : [])
+          const list = Array.isArray(data) ? data : []
+          // Pre-seed seen set so historical violations never trigger toasts
+          // even if the SSE reconnects and re-delivers them as 'violation' events.
+          for (const v of list) {
+            if (v.violation_id) shownToastIds.current.add(v.violation_id)
+          }
+          setViolations(list)
         } catch {
           // ignore malformed payload
         }
@@ -56,23 +65,26 @@ export function useViolationStream(): UseViolationStreamResult {
         try {
           const v = JSON.parse(ev.data) as Violation
           if (!v || !v.violation_id) return
+          // Only treat as new if we haven't seen this violation_id before.
+          // shownToastIds persists across reconnects so re-delivered events
+          // (SSE reconnect, duplicate emit) never fire a second toast.
+          const isNew = !shownToastIds.current.has(v.violation_id)
+          if (isNew) shownToastIds.current.add(v.violation_id)
           setViolations(prev => {
-            // De-dupe by violation_id
             if (prev.some(p => p.violation_id === v.violation_id)) return prev
             return [v, ...prev]
           })
-          setUnreadCount(c => c + 1)
-          if (SEVERITY_RANK[v.severity] >= SEVERITY_RANK.high) {
-            push({
-              // Use violation_id as the toast id so re-delivered events from
-              // the SSE stream don't create duplicate toasts — ToastProvider
-              // de-dupes by id.
-              id: `violation-${v.violation_id}`,
-              title: `${v.severity.toUpperCase()}: ${v.guardrail_name}`,
-              body: v.reason?.slice(0, 140) || `Agent ${v.agent_id} flagged`,
-              severity: v.severity,
-              violationId: v.violation_id,
-            })
+          if (isNew) {
+            setUnreadCount(c => c + 1)
+            if (SEVERITY_RANK[v.severity] >= SEVERITY_RANK.high) {
+              push({
+                id: `violation-${v.violation_id}`,
+                title: `${v.severity.toUpperCase()}: ${v.guardrail_name}`,
+                body: v.reason?.slice(0, 140) || `Agent ${v.agent_id} flagged`,
+                severity: v.severity,
+                violationId: v.violation_id,
+              })
+            }
           }
         } catch {
           // ignore malformed payload

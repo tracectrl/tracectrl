@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-05T00:00:00.000Z",
+  "extensions": {
+    "colorMeta": {
+      "strategy": "restrained",
+      "tonal": {
+        "surfaces": [
+          { "token": "void-black",      "hex": "#040404", "role": "canvas background" },
+          { "token": "surface-base",    "hex": "#111111", "role": "sidebar, primary layer" },
+          { "token": "surface-card",    "hex": "#161616", "role": "cards, panels, drawers" },
+          { "token": "surface-elevated","hex": "#0A0A0A", "role": "inputs, code blocks, inset" }
+        ],
+        "text": [
+          { "token": "text-primary",   "hex": "#F5F5F5", "role": "headlines, values, labels" },
+          { "token": "text-secondary", "hex": "#AAAAAA", "role": "body copy, supporting text" },
+          { "token": "text-muted",     "hex": "#6B6B6B", "role": "timestamps, metadata" },
+          { "token": "text-faint",     "hex": "#8A8A8A", "role": "inactive nav, placeholders" }
+        ],
+        "accent": [
+          { "token": "signal-red",       "hex": "#FC0404", "role": "primary accent — nav, section tags, CTA, violation" },
+          { "token": "signal-red-hover", "hex": "#FF2D2D", "role": "interactive state on red elements" },
+          { "token": "signal-red-melon", "hex": "#FCBEBE", "role": "illustrated states, alert tints (sparingly)" },
+          { "token": "command-jade",     "hex": "#40706C", "role": "confirmation, guarded agents, health badges" }
+        ],
+        "risk": [
+          { "token": "risk-critical", "hex": "#FF4D4D", "role": "prompt injection, policy bypass, immediate threat" },
+          { "token": "risk-high",     "hex": "#FF6B35", "role": "rule violations, guardrail failures" },
+          { "token": "risk-medium",   "hex": "#FFBB00", "role": "suspicious patterns, anomalies" },
+          { "token": "risk-low",      "hex": "#22C55E", "role": "informational, clean state, pass" }
+        ]
+      },
+      "glows": {
+        "redGlow":  "rgba(252, 4, 4, 0.25)",
+        "redSoft":  "rgba(252, 4, 4, 0.10)",
+        "jadeGlow": "rgba(64, 112, 108, 0.25)"
+      }
+    },
+    "motion": {
+      "easing": "cubic-bezier(0.16, 1, 0.3, 1)",
+      "durationFast": "150ms",
+      "durationBase": "200ms",
+      "properties": ["background-color", "border-color", "color", "opacity", "transform"],
+      "reducedMotion": "prefers-reduced-motion: reduce — skip all transitions"
+    },
+    "shadows": {
+      "note": "Flat by default. No box-shadow at rest. Glow only on active violation/alert contexts.",
+      "redAlert":  "0 0 0 1px rgba(252,4,4,0.3), 0 4px 24px rgba(252,4,4,0.15)",
+      "jadeAlert": "0 0 0 1px rgba(64,112,108,0.3), 0 4px 24px rgba(64,112,108,0.12)"
+    }
+  },
+  "components": [
+    {
+      "name": "SeverityBadge",
+      "description": "Risk severity chip — critical/high/medium/low variants",
+      "html": "<span class=\"badge badge-critical\">CRITICAL</span> <span class=\"badge badge-high\">HIGH</span> <span class=\"badge badge-medium\">MEDIUM</span> <span class=\"badge badge-low\">LOW</span>",
+      "css": ".badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; } .badge-critical { background: rgba(255,77,77,0.12); color: #FF4D4D; } .badge-high { background: rgba(255,107,53,0.12); color: #FF6B35; } .badge-medium { background: rgba(255,187,0,0.12); color: #FFBB00; } .badge-low { background: rgba(34,197,94,0.12); color: #22C55E; }"
+    },
+    {
+      "name": "AgentBadge",
+      "description": "Agent type / jade confirmation badge",
+      "html": "<span class=\"badge badge-agent\">AGENT</span>",
+      "css": ".badge-agent { background: rgba(64,112,108,0.15); color: #40706C; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; }"
+    },
+    {
+      "name": "SectionTag",
+      "description": "Eyebrow label: 20px red rule + uppercase red type",
+      "html": "<div class=\"section-tag\">Security Violations</div>",
+      "css": ".section-tag { display: flex; align-items: center; gap: 10px; font-family: 'Poppins', sans-serif; font-size: 11px; font-weight: 700; color: #FC0404; text-transform: uppercase; letter-spacing: 0.12em; } .section-tag::before { content: ''; display: block; width: 20px; height: 2px; background: #FC0404; flex-shrink: 0; }"
+    },
+    {
+      "name": "DataCard",
+      "description": "Surface card container — 12px radius, #161616 bg, #222 border",
+      "html": "<div class=\"data-card\"><div class=\"card-title\">Card Title</div><p class=\"card-body\">Supporting body text here.</p></div>",
+      "css": ".data-card { background: #161616; border: 1px solid #222222; border-radius: 12px; padding: 24px; } .card-title { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 600; color: #F5F5F5; margin: 0 0 8px; } .card-body { font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 400; color: #AAAAAA; line-height: 1.6; margin: 0; max-width: 70ch; }"
+    },
+    {
+      "name": "NavItem",
+      "description": "Sidebar navigation item — default / hover / active states",
+      "html": "<nav><a class=\"nav-item\" href=\"#\">Agents</a><a class=\"nav-item nav-item--active\" href=\"#\">Alerts</a><a class=\"nav-item\" href=\"#\">Traces</a></nav>",
+      "css": ".nav-item { display: block; padding: 9px 24px; font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 500; color: #8A8A8A; text-decoration: none; border-left: 2px solid transparent; transition: color 150ms cubic-bezier(0.16,1,0.3,1), border-color 150ms cubic-bezier(0.16,1,0.3,1); } .nav-item:hover { color: #F5F5F5; } .nav-item--active { color: #FC0404; border-left-color: #FC0404; }"
+    },
+    {
+      "name": "PrimaryButton",
+      "description": "Signal red CTA button",
+      "html": "<button class=\"btn-primary\">Run Scan</button>",
+      "css": ".btn-primary { background: #FC0404; color: #F5F5F5; border: none; border-radius: 6px; padding: 10px 20px; font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 150ms cubic-bezier(0.16,1,0.3,1); } .btn-primary:hover { background: #FF2D2D; }"
+    },
+    {
+      "name": "MonoDataField",
+      "description": "JetBrains Mono data display — IDs, counts, durations, timestamps",
+      "html": "<span class=\"mono-data\">trace_7f3a9c02</span> <span class=\"mono-data\">142ms</span> <span class=\"mono-data\">2026-05-05 02:14:07Z</span>",
+      "css": ".mono-data { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; font-weight: 400; color: #F5F5F5; line-height: 1.6; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Control Tower",
+    "overview": "TraceCtrl is a high-stakes precision instrument for security observability and runtime control of AI agents. The interface reflects the responsibility of watching over complex, potentially compromised systems: information-dense but never chaotic, authoritative but never alarming.",
+    "keyCharacteristics": [
+      "Dark-first tonal layering: depth through surface steps, not shadows",
+      "Red as a leadership accent — commanding voice, not a warning color",
+      "Dense information hierarchy through scale and weight contrast, not whitespace",
+      "Monospaced type (JetBrains Mono) for all data, IDs, counts, timestamps",
+      "Flat at rest; state (hover, active, selected) reveals structure"
+    ],
+    "rules": {
+      "oneVoice": "Signal Red is the primary voice. Every other color defers to it. Protect its reflex by keeping red off neutral content.",
+      "riskIsolation": "The four risk colors exist solely for severity communication. Use jade for non-risk confirmations.",
+      "registerDivide": "Poppins for human-readable language; JetBrains Mono for machine-readable data.",
+      "weightContrast": "Scale steps must carry a weight shift: 800/700 for display/headline, 600 for title, 400 for body.",
+      "flatByDefault": "No shadows at rest. Depth is a property of the surface stack.",
+      "glowException": "Faint red glow permitted only on active violation alerts and toast notifications for HIGH/CRITICAL severity."
+    },
+    "dos": [
+      "Use Signal Red to lead visual hierarchy: section tags, active nav, primary buttons, violation headlines",
+      "Use JetBrains Mono for all machine-readable data",
+      "Express depth through the surface stack, not shadows or blurs",
+      "Use 12% translucent backgrounds for risk badges",
+      "Reserve risk colors exclusively for agent/guardrail severity signals",
+      "Apply the Section Tag pattern as the standard page heading eyebrow",
+      "Cap body line length at 65-75ch",
+      "Use cubic-bezier(0.16, 1, 0.3, 1) for all transitions"
+    ],
+    "donts": [
+      "Don't build like Splunk or legacy SIEM dashboards",
+      "Don't dramatize risk with aggressive red everywhere",
+      "Don't build generic SaaS widget grids with identical cards",
+      "Don't use border-left/right > 1px as colored accents (nav active indicator is the sole exception)",
+      "Don't use background-clip: text with gradient backgrounds",
+      "Don't use glassmorphism decoratively",
+      "Don't use the hero-metric template (large centered number + gradient)",
+      "Don't apply risk color scale to non-security signals"
+    ]
+  }
+}

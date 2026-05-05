@@ -41,7 +41,7 @@ export default function AgentBriefDrawer({ open, onClose, findings, workspacePat
       <header className="drawer-header">
         <div>
           <div className="drawer-crumb"><span>Agent brief</span></div>
-          <h3 className="drawer-title" style={{ margin: 0, fontSize: 18 }}>
+          <h3 className="drawer-title" style={{ margin: 0 }}>
             {findings.length} finding{findings.length === 1 ? '' : 's'} · ready for your agent
           </h3>
         </div>

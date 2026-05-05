@@ -115,7 +115,6 @@ export async function validateWorkspacePath(path: string): Promise<PathValidatio
 
 export async function triggerScan(workspacePath: string, profile?: 'L1' | 'L2'): Promise<ScanTriggerResponse> {
   const payload = { workspace_path: workspacePath, ...(profile ? { profile } : {}) }
-  console.log('Trigger scan payload:', payload)
 
   const res = await fetch(`${ENGINE_URL}/api/v1/scan/trigger`, {
     method: 'POST',

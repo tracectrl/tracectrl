@@ -63,7 +63,6 @@ export default function ScanReport() {
 
     try {
       const workspacePath = results[0].openclaw_path
-      console.log('Triggering scan with workspace path:', workspacePath)
 
       // Trigger new scan
       const trigger = await triggerScan(workspacePath)
@@ -93,14 +92,6 @@ export default function ScanReport() {
         newData.results
       )
 
-      console.log('=== SCAN DIFF DEBUG ===')
-      console.log('Previous topology nodes:', previousScanRef.current.topology?.nodes.length)
-      console.log('New topology nodes:', newData.topology?.nodes.length)
-      console.log('Previous results:', previousScanRef.current.results.length)
-      console.log('New results:', newData.results.length)
-      console.log('Diff:', diff)
-      console.log('Has changes:', diff.hasChanges)
-
       if (diff.hasChanges) {
         setScanDiff(diff)
 
@@ -112,8 +103,6 @@ export default function ScanReport() {
 
         // Clear glow after 3 seconds
         setTimeout(() => setNewNodeIds(new Set()), 3000)
-      } else {
-        console.warn('No changes detected after rescan!')
       }
 
       // Restore scroll position
@@ -196,7 +185,7 @@ export default function ScanReport() {
                     className={`phase-toggle${showSkills ? ' active' : ''}`}
                     onClick={() => setShowSkills(prev => !prev)}
                     aria-pressed={showSkills}
-                    style={{ fontSize: '12px', padding: '4px 10px' }}
+                    style={{ padding: '4px 10px' }}
                   >
                     {showSkills ? 'Hide Skills' : 'Show Skills'}
                   </button>
