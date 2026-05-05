@@ -635,6 +635,9 @@ h4 {
   backdrop-filter: blur(8px);
   z-index: 10;
 }
+[data-theme="light"] .graph-legend {
+  background: rgba(255, 255, 255, 0.92);
+}
 
 .graph-legend-item {
   display: flex;
@@ -3062,6 +3065,7 @@ h4 {
   transition: background 140ms ease, border-color 140ms ease;
 }
 .graph-canvas-toolbtn:hover { background: var(--dark); border-color: var(--gray-700); }
+[data-theme="light"] .graph-canvas-toolbtn { color: var(--white); }
 .graph-canvas-toolbtn.is-active {
   background: #4A90D9;
   border-color: #4A90D9;
