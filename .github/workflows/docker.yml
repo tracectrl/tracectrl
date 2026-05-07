@@ -46,6 +46,7 @@ jobs:
           context: .
           file: engine/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/tracectrl-engine:latest
             ghcr.io/${{ github.repository_owner }}/tracectrl-engine:${{ github.sha }}
@@ -72,6 +73,7 @@ jobs:
           context: ui
           file: ui/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/tracectrl-ui:latest
             ghcr.io/${{ github.repository_owner }}/tracectrl-ui:${{ github.sha }}
