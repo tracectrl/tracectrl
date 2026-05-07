@@ -11,6 +11,23 @@ TraceCtrl gives security teams and developers complete visibility into every age
 
 ---
 
+## Install
+
+| Package | Version | Monthly Downloads |
+|---------|---------|-------------------|
+| `tracectrl` | [![PyPI](https://img.shields.io/pypi/v/tracectrl?color=blue)](https://pypi.org/project/tracectrl/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl?color=blue)](https://pypistats.org/packages/tracectrl) |
+| `tracectrl-scanner` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-scanner?color=blue)](https://pypi.org/project/tracectrl-scanner/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-scanner?color=blue)](https://pypistats.org/packages/tracectrl-scanner) |
+| `tracectrl-mcp` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-mcp?color=blue)](https://pypi.org/project/tracectrl-mcp/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-mcp?color=blue)](https://pypistats.org/packages/tracectrl-mcp) |
+| `tracectrl-instrumentation-agno` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-instrumentation-agno?color=blue)](https://pypi.org/project/tracectrl-instrumentation-agno/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-instrumentation-agno?color=blue)](https://pypistats.org/packages/tracectrl-instrumentation-agno) |
+| `tracectrl-instrumentation-strands` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-instrumentation-strands?color=blue)](https://pypi.org/project/tracectrl-instrumentation-strands/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-instrumentation-strands?color=blue)](https://pypistats.org/packages/tracectrl-instrumentation-strands) |
+
+**Docker images (GHCR)**
+
+[![Engine](https://img.shields.io/badge/ghcr.io-tracectrl--engine-blue?logo=docker)](https://ghcr.io/tracectrl/tracectrl-engine)
+[![UI](https://img.shields.io/badge/ghcr.io-tracectrl--ui-blue?logo=docker)](https://ghcr.io/tracectrl/tracectrl-ui)
+
+---
+
 ## Features
 
 - **TAGAAI Attack Graph Engine** — Automated vulnerability detection with built-in rules for prompt injection, excessive agency, and data leakage. CVSS-based risk scoring combining base severity, exploitability, and blast radius.
