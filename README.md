@@ -74,9 +74,10 @@ TraceCtrl gives security teams and developers complete visibility into every age
 ```bash
 git clone https://github.com/tracectrl/tracectrl.git
 cd tracectrl
-cp .env.example .env
-docker compose up -d
+make start
 ```
+
+`make start` pulls the latest engine and UI images from GHCR and starts the full stack.
 
 Verify the stack is running:
 
@@ -94,7 +95,7 @@ For detailed setup options including the TUI wizard and development mode, see th
 After the stack is running, send test spans with the included demo agent:
 
 ```bash
-pip install -e ./sdk/tracectrl
+pip install tracectrl
 python examples/demo_agent.py
 ```
 
@@ -103,7 +104,7 @@ Open [http://localhost:3000/sessions](http://localhost:3000/sessions) — you sh
 To scan an OpenClaw installation for security issues:
 
 ```bash
-pip install -e ./scanner
+pip install tracectrl-scanner
 tracectrl scan ~/.openclaw/
 ```
 

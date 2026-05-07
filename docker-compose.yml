@@ -29,9 +29,7 @@ services:
       retries: 10
 
   tracectrl-engine:
-    build:
-      context: .
-      dockerfile: ./engine/Dockerfile
+    image: ghcr.io/tracectrl/tracectrl-engine:latest
     ports:
       - "8000:8000"
     volumes:
@@ -51,8 +49,7 @@ services:
       retries: 5
 
   tracectrl-ui:
-    build:
-      context: ./ui
+    image: ghcr.io/tracectrl/tracectrl-ui:latest
     ports:
       - "3000:3000"
     depends_on:

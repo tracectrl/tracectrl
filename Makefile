@@ -1,15 +1,31 @@
-.PHONY: setup dev test lint build clean tui scan demo
+.PHONY: setup setup-dev dev pull test lint build clean tui scan demo
 
-# ── Setup ──────────────────────────────────────────────
+# ── Setup (uses published PyPI packages) ───────────────
 setup:
 	python3 -m pip install --upgrade pip
-	pip install -e ./sdk/tracectrl
+	pip install tracectrl tracectrl-scanner
+	@echo "\n✓ Setup complete. Run 'make start' to launch the stack."
+
+# ── Setup for contributors (editable installs) ─────────
+setup-dev:
+	python3 -m pip install --upgrade pip
 	pip install -e ./scanner
+	pip install -e ./sdk/tracectrl
 	pip install -r engine/requirements.txt
 	pip install pytest ruff
-	@echo "\n✓ Setup complete. Run 'make dev' to start the stack."
+	@echo "\n✓ Dev setup complete. Run 'make dev' to start the stack."
 
-# ── Dev ────────────────────────────────────────────────
+# ── Start (pull latest images + run) ───────────────────
+start: pull
+	docker compose up -d
+	@echo "\n✓ Stack running. Dashboard → http://localhost:3000"
+
+# ── Pull latest GHCR images ────────────────────────────
+pull:
+	docker pull ghcr.io/tracectrl/tracectrl-engine:latest
+	docker pull ghcr.io/tracectrl/tracectrl-ui:latest
+
+# ── Dev (hot reload, local build) ──────────────────────
 dev:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
@@ -21,9 +37,9 @@ test:
 lint:
 	ruff check sdk/ engine/ scanner/ tests/
 
-# ── Build ──────────────────────────────────────────────
+# ── Build images locally ───────────────────────────────
 build:
-	docker compose build
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml build
 
 # ── TUI Setup ─────────────────────────────────────────
 tui:
