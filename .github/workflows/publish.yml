@@ -1,0 +1,68 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "*-v[0-9]*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve package directory from tag
+        id: pkg
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Strip trailing -vX.Y.Z to get package name
+          PKG_NAME="${TAG%-v*}"
+          echo "name=$PKG_NAME" >> "$GITHUB_OUTPUT"
+
+          # Map package name to directory
+          case "$PKG_NAME" in
+            tracectrl)                          DIR="sdk/tracectrl" ;;
+            tracectrl-scanner)                  DIR="scanner" ;;
+            tracectrl-mcp)                      DIR="sdk/tracectrl-mcp" ;;
+            tracectrl-instrumentation-crewai)   DIR="sdk/tracectrl-instrumentation-crewai" ;;
+            tracectrl-instrumentation-strands)  DIR="sdk/tracectrl-instrumentation-strands" ;;
+            tracectrl-instrumentation-agno)     DIR="sdk/tracectrl-instrumentation-agno" ;;
+            tracectrl-instrumentation-langchain) DIR="sdk/tracectrl-instrumentation-langchain" ;;
+            tracectrl-instrumentation-google-adk) DIR="sdk/tracectrl-instrumentation-google-adk" ;;
+            *)
+              echo "Unknown package: $PKG_NAME"
+              exit 1
+              ;;
+          esac
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag version matches pyproject.toml
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          TAG_VERSION="${TAG##*-v}"
+          TOML_VERSION=$(grep '^version' "${{ steps.pkg.outputs.dir }}/pyproject.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
+          if [ "$TAG_VERSION" != "$TOML_VERSION" ]; then
+            echo "Version mismatch: tag=$TAG_VERSION pyproject.toml=$TOML_VERSION"
+            exit 1
+          fi
+          echo "Version $TOML_VERSION confirmed."
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build ${{ steps.pkg.outputs.name }}
+        run: python -m build "${{ steps.pkg.outputs.dir }}"
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: "${{ steps.pkg.outputs.dir }}/dist"
