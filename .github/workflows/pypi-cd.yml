@@ -1,0 +1,71 @@
+name: Publish changed packages to PyPI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scanner/**'
+      - 'sdk/**'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: tracectrl
+            dir: sdk/tracectrl
+          - name: tracectrl-scanner
+            dir: scanner
+          - name: tracectrl-mcp
+            dir: sdk/tracectrl-mcp
+          - name: tracectrl-instrumentation-strands
+            dir: sdk/tracectrl-instrumentation-strands
+          - name: tracectrl-instrumentation-agno
+            dir: sdk/tracectrl-instrumentation-agno
+          - name: tracectrl-instrumentation-crewai
+            dir: sdk/tracectrl-instrumentation-crewai
+          - name: tracectrl-instrumentation-langchain
+            dir: sdk/tracectrl-instrumentation-langchain
+          - name: tracectrl-instrumentation-google-adk
+            dir: sdk/tracectrl-instrumentation-google-adk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check if version is new
+        id: check
+        run: |
+          VERSION=$(grep '^version' ${{ matrix.dir }}/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/${{ matrix.name }}/$VERSION/json)
+          if [ "$STATUS" = "404" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "${{ matrix.name }} $VERSION not on PyPI — will publish."
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "${{ matrix.name }} $VERSION already on PyPI — skipping."
+          fi
+
+      - name: Build ${{ matrix.name }}
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          pip install build
+          python -m build ${{ matrix.dir }}
+
+      - name: Publish ${{ matrix.name }} ${{ steps.check.outputs.version }}
+        if: steps.check.outputs.publish == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ matrix.dir }}/dist

@@ -11,6 +11,22 @@ TraceCtrl gives security teams and developers complete visibility into every age
 
 ---
 
+## Install
+
+| Package | Version | Monthly Downloads |
+|---------|---------|-------------------|
+| `tracectrl` | [![PyPI](https://img.shields.io/pypi/v/tracectrl?color=blue)](https://pypi.org/project/tracectrl/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl?color=blue)](https://pypistats.org/packages/tracectrl) |
+| `tracectrl-scanner` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-scanner?color=blue)](https://pypi.org/project/tracectrl-scanner/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-scanner?color=blue)](https://pypistats.org/packages/tracectrl-scanner) |
+| `tracectrl-instrumentation-agno` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-instrumentation-agno?color=blue)](https://pypi.org/project/tracectrl-instrumentation-agno/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-instrumentation-agno?color=blue)](https://pypistats.org/packages/tracectrl-instrumentation-agno) |
+| `tracectrl-instrumentation-strands` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-instrumentation-strands?color=blue)](https://pypi.org/project/tracectrl-instrumentation-strands/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-instrumentation-strands?color=blue)](https://pypistats.org/packages/tracectrl-instrumentation-strands) |
+
+**Docker images (GHCR)**
+
+[![Engine](https://img.shields.io/badge/ghcr.io-tracectrl--engine-blue?logo=docker)](https://ghcr.io/tracectrl/tracectrl-engine)
+[![UI](https://img.shields.io/badge/ghcr.io-tracectrl--ui-blue?logo=docker)](https://ghcr.io/tracectrl/tracectrl-ui)
+
+---
+
 ## Features
 
 - **TAGAAI Attack Graph Engine** — Automated vulnerability detection with built-in rules for prompt injection, excessive agency, and data leakage. CVSS-based risk scoring combining base severity, exploitability, and blast radius.
@@ -74,9 +90,10 @@ TraceCtrl gives security teams and developers complete visibility into every age
 ```bash
 git clone https://github.com/tracectrl/tracectrl.git
 cd tracectrl
-cp .env.example .env
-docker compose up -d
+make start
 ```
+
+`make start` pulls the latest engine and UI images from GHCR and starts the full stack.
 
 Verify the stack is running:
 
@@ -94,7 +111,7 @@ For detailed setup options including the TUI wizard and development mode, see th
 After the stack is running, send test spans with the included demo agent:
 
 ```bash
-pip install -e ./sdk/tracectrl
+pip install tracectrl
 python examples/demo_agent.py
 ```
 
@@ -103,7 +120,7 @@ Open [http://localhost:3000/sessions](http://localhost:3000/sessions) — you sh
 To scan an OpenClaw installation for security issues:
 
 ```bash
-pip install -e ./scanner
+pip install tracectrl-scanner
 tracectrl scan ~/.openclaw/
 ```
 
