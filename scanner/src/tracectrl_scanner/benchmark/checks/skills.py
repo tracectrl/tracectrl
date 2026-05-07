@@ -192,7 +192,7 @@ def run(config: dict[str, Any], root: Path) -> list[CheckResult]:
             f"{skill_count} skills configured ({', '.join(skill_names)}). "
             f"Recommended maximum is {threshold}."
         ) if skill_count > threshold else None,
-        remediation=f"Remove unused skills from skills.entries. Each active skill increases the agent's blast radius if compromised via prompt injection.",
+        remediation="Remove unused skills from skills.entries. Each active skill increases the agent's blast radius if compromised via prompt injection.",
         config_path="skills.entries",
         rationale="Each additional skill increases the blast radius if the agent is compromised. Only enable skills that are actively used.",
     ))
