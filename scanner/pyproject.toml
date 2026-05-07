@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "tracectrl-scanner"
 version = "0.1.0"
 description = "Static security scanner for OpenClaw installations"
+readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 authors = [{ name = "CloudsineAI" }]

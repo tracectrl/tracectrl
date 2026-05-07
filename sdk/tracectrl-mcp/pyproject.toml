@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "tracectrl-mcp"
 version = "0.1.0"
 description = "TraceCtrl MCP Proxy — transparent tool call tracing for IDE agents"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "tracectrl>=0.1.0",

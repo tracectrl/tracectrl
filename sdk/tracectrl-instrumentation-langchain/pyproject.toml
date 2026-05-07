@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "tracectrl-instrumentation-langchain"
 version = "0.1.0"
 description = "TraceCtrl LangChain/LangGraph instrumentation"
+readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
