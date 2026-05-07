@@ -17,7 +17,6 @@ TraceCtrl gives security teams and developers complete visibility into every age
 |---------|---------|-------------------|
 | `tracectrl` | [![PyPI](https://img.shields.io/pypi/v/tracectrl?color=blue)](https://pypi.org/project/tracectrl/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl?color=blue)](https://pypistats.org/packages/tracectrl) |
 | `tracectrl-scanner` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-scanner?color=blue)](https://pypi.org/project/tracectrl-scanner/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-scanner?color=blue)](https://pypistats.org/packages/tracectrl-scanner) |
-| `tracectrl-mcp` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-mcp?color=blue)](https://pypi.org/project/tracectrl-mcp/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-mcp?color=blue)](https://pypistats.org/packages/tracectrl-mcp) |
 | `tracectrl-instrumentation-agno` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-instrumentation-agno?color=blue)](https://pypi.org/project/tracectrl-instrumentation-agno/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-instrumentation-agno?color=blue)](https://pypistats.org/packages/tracectrl-instrumentation-agno) |
 | `tracectrl-instrumentation-strands` | [![PyPI](https://img.shields.io/pypi/v/tracectrl-instrumentation-strands?color=blue)](https://pypi.org/project/tracectrl-instrumentation-strands/) | [![Downloads](https://img.shields.io/pypi/dm/tracectrl-instrumentation-strands?color=blue)](https://pypistats.org/packages/tracectrl-instrumentation-strands) |
 
