@@ -1,22 +1,18 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
-import { fetchAgentList, fetchAgentTools, AgentSummary, AgentTool } from '../api/agents'
-import SortableTh from '../components/shared/SortableTh'
+import { useEffect, useState, useMemo, useCallback } from 'react'
+import { fetchAgentList, AgentSummary } from '../api/agents'
+import { fetchGuardrails } from '../api/guardrails'
 import EmptyState from '../components/shared/EmptyState'
 import ErrorBanner from '../components/shared/ErrorBanner'
+import AgentDetailPanel from '../components/AgentDetailPanel'
 import { useProject } from '../context/ProjectContext'
-
-type SortKey = 'name' | 'observation_count' | 'last_seen' | 'tools_count'
 
 export default function Agents() {
   const { selectedProject } = useProject()
   const [agents, setAgents] = useState<AgentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [sortKey, setSortKey] = useState<SortKey>('last_seen')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null)
-  const [expandedTools, setExpandedTools] = useState<AgentTool[]>([])
-  const [expandedLoading, setExpandedLoading] = useState(false)
+  const [selected, setSelected] = useState<AgentSummary | null>(null)
+  const [guardrailCounts, setGuardrailCounts] = useState<Record<string, number>>({})
 
   useEffect(() => { document.title = 'Agents — TraceCtrl' }, [])
 
@@ -27,49 +23,56 @@ export default function Agents() {
       .then(setAgents)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
+    // Bulk-fetch guardrails so each card can show a shield chip without N+1.
+    fetchGuardrails()
+      .then(list => {
+        const counts: Record<string, number> = {}
+        for (const g of list) {
+          counts[g.agent_id] = (counts[g.agent_id] ?? 0) + 1
+        }
+        setGuardrailCounts(counts)
+      })
+      .catch(() => setGuardrailCounts({}))
   }, [selectedProject])
 
   useEffect(() => { load() }, [load])
 
-  const sorted = useMemo(() => {
-    const copy = [...agents]
-    copy.sort((a, b) => {
-      let cmp = 0
-      if (sortKey === 'name') cmp = (a.name || a.agent_id).localeCompare(b.name || b.agent_id)
-      else if (sortKey === 'observation_count') cmp = a.observation_count - b.observation_count
-      else if (sortKey === 'last_seen') cmp = a.last_seen.localeCompare(b.last_seen)
-      else if (sortKey === 'tools_count') cmp = a.tools_observed.length - b.tools_observed.length
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-    return copy
-  }, [agents, sortKey, sortDir])
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('desc') }
-  }
-
-  const formatTime = (iso: string) => {
-    const d = new Date(iso)
-    return d.toLocaleString(undefined, {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    })
-  }
-
-  const handleRowActivate = useCallback((agentId: string) => {
-    if (expandedAgentId === agentId) {
-      setExpandedAgentId(null)
-      setExpandedTools([])
-      return
+  const grouped = useMemo(() => {
+    // Bucket by framework so related agents stay together. Unknown frameworks
+    // fall under "Other" so the page never has rogue ungrouped rows.
+    const buckets: Record<string, AgentSummary[]> = {}
+    for (const a of agents) {
+      const key = (a.framework || 'other').toLowerCase()
+      if (!buckets[key]) buckets[key] = []
+      buckets[key].push(a)
     }
-    setExpandedAgentId(agentId)
-    setExpandedLoading(true)
-    fetchAgentTools(agentId)
-      .then(setExpandedTools)
-      .catch(() => setExpandedTools([]))
-      .finally(() => setExpandedLoading(false))
-  }, [expandedAgentId])
+    const order = ['strands', 'agno', 'openclaw', 'langchain', 'openai', 'other']
+    const sorted: { framework: string; agents: AgentSummary[] }[] = []
+    for (const k of order) {
+      if (buckets[k]) {
+        sorted.push({
+          framework: k,
+          agents: [...buckets[k]].sort((a, b) => b.last_seen.localeCompare(a.last_seen)),
+        })
+        delete buckets[k]
+      }
+    }
+    for (const k of Object.keys(buckets)) {
+      sorted.push({
+        framework: k,
+        agents: [...buckets[k]].sort((a, b) => b.last_seen.localeCompare(a.last_seen)),
+      })
+    }
+    return sorted
+  }, [agents])
+
+  const formatRelative = (iso: string) => {
+    const ms = Date.now() - new Date(iso).getTime()
+    if (ms < 60_000) return 'just now'
+    if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`
+    if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`
+    return `${Math.floor(ms / 86_400_000)}d ago`
+  }
 
   return (
     <div>
@@ -84,9 +87,9 @@ export default function Agents() {
       {error && <ErrorBanner error={error} onRetry={load} />}
 
       {loading ? (
-        <div className="table-container">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="loading-skeleton" style={{ height: 44, marginBottom: 2 }} />
+        <div className="agent-grid">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="loading-skeleton" style={{ height: 110 }} />
           ))}
         </div>
       ) : agents.length === 0 ? (
@@ -103,113 +106,84 @@ export default function Agents() {
           }
         />
       ) : (
-        <div className="sessions-list">
-          <div className="table-container">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 28 }} />
-                  <SortableTh active={sortKey === 'name'} direction={sortDir} onToggle={() => toggleSort('name')}>Name</SortableTh>
-                  <th>Framework</th>
-                  <th>Model</th>
-                  <SortableTh active={sortKey === 'tools_count'} direction={sortDir} onToggle={() => toggleSort('tools_count')}>Tools</SortableTh>
-                  <SortableTh active={sortKey === 'observation_count'} direction={sortDir} onToggle={() => toggleSort('observation_count')}>Observations</SortableTh>
-                  <th>Maturity</th>
-                  <SortableTh active={sortKey === 'last_seen'} direction={sortDir} onToggle={() => toggleSort('last_seen')}>Last Seen</SortableTh>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map(agent => {
-                  const isExpanded = expandedAgentId === agent.agent_id
-                  return (
-                    <React.Fragment key={agent.agent_id}>
-                      <tr
-                        onClick={() => handleRowActivate(agent.agent_id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRowActivate(agent.agent_id) }
-                        }}
-                        tabIndex={0}
-                        role="button"
-                        aria-expanded={isExpanded}
-                        style={{ cursor: 'pointer' }}
-                        className={isExpanded ? 'selected' : ''}
-                      >
-                        <td style={{ width: 28, textAlign: 'center', color: 'var(--gray-500)', fontSize: 10 }}>
-                          {isExpanded ? '▼' : '▶'}
-                        </td>
-                        <td className="primary">{agent.name || agent.agent_id}</td>
-                        <td><span className="badge">{agent.framework}</span></td>
-                        <td className="mono">{agent.model}</td>
-                        <td className="mono">{agent.tools_observed.length}</td>
-                        <td className="mono">{agent.observation_count}</td>
-                        <td>
-                          {agent.maturity === 'MATURE' ? (
-                            <span className="badge badge-low">MATURE</span>
-                          ) : (
-                            <span className="badge badge-medium">LEARNING</span>
-                          )}
-                        </td>
-                        <td className="text-muted">{formatTime(agent.last_seen)}</td>
-                      </tr>
-
-                      {isExpanded && (
-                        <tr className="session-expanded-row">
-                          <td colSpan={8} style={{ padding: 0 }}>
-                            <div className="session-expanded-content">
-                              {expandedLoading ? (
-                                <div style={{ padding: 'var(--space-4)' }}>
-                                  {[...Array(3)].map((_, i) => (
-                                    <div key={i} className="loading-skeleton" style={{ height: 32, marginBottom: 2 }} />
-                                  ))}
-                                </div>
-                              ) : expandedTools.length === 0 ? (
-                                <div style={{ padding: 'var(--space-4)', color: 'var(--gray-500)' }}>
-                                  No tool usage recorded for this agent.
-                                </div>
-                              ) : (
-                                <div style={{ padding: 'var(--space-4)' }}>
-                                  <div className="trace-inline-header">
-                                    <div className="trace-inline-title">Tools</div>
-                                    <div className="trace-inline-meta">
-                                      <span>{expandedTools.length} tools observed</span>
-                                    </div>
-                                  </div>
-                                  <table className="table" style={{ marginTop: 'var(--space-2)' }}>
-                                    <thead>
-                                      <tr>
-                                        <th>Tool Name</th>
-                                        <th>Category</th>
-                                        <th>Calls</th>
-                                        <th>Errors</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {expandedTools.map(tool => (
-                                        <tr key={tool.tool_name}>
-                                          <td className="primary">{tool.tool_name}</td>
-                                          <td><span className="badge">{tool.tool_category}</span></td>
-                                          <td className="mono">{tool.call_count}</td>
-                                          <td className="mono">{tool.error_count > 0 ? (
-                                            <span style={{ color: 'var(--risk-critical)' }}>{tool.error_count}</span>
-                                          ) : '0'}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
+        <div className="agent-groups">
+          {grouped.map(group => (
+            <section key={group.framework} className="agent-group">
+              <header className="agent-group-head">
+                <h3 className="agent-group-title">{group.framework}</h3>
+                <span className="agent-group-count">{group.agents.length}</span>
+              </header>
+              <div className="agent-grid">
+                {group.agents.map(agent => (
+                  <div
+                    key={agent.agent_id}
+                    className="agent-card"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open ${agent.name || agent.agent_id} details`}
+                    onClick={() => setSelected(agent)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setSelected(agent)
+                      }
+                    }}
+                  >
+                    <div className="agent-card-head">
+                      <div className="agent-card-name" title={agent.name || agent.agent_id}>
+                        {agent.name || agent.agent_id}
+                      </div>
+                      <span className={`badge ${agent.maturity === 'MATURE' ? 'badge-low' : 'badge-medium'}`}>
+                        {agent.maturity}
+                      </span>
+                    </div>
+                    <div className="agent-card-meta">
+                      <span className="agent-card-meta-item mono" title={agent.model || 'no model recorded'}>
+                        {agent.model || '—'}
+                      </span>
+                    </div>
+                    <div className="agent-card-stats">
+                      <div className="agent-stat">
+                        <span className="agent-stat-value mono">{agent.tools_observed.length}</span>
+                        <span className="agent-stat-label">tools</span>
+                      </div>
+                      <div className="agent-stat">
+                        <span className="agent-stat-value mono">{agent.total_tool_calls}</span>
+                        <span className="agent-stat-label">tool calls</span>
+                      </div>
+                      <div className="agent-stat">
+                        <span className="agent-stat-value mono">{agent.run_count}</span>
+                        <span className="agent-stat-label">runs</span>
+                      </div>
+                      {(guardrailCounts[agent.agent_id] ?? 0) > 0 && (
+                        <div
+                          className="agent-stat agent-stat-guardrails"
+                          title={`${guardrailCounts[agent.agent_id]} guardrail${guardrailCounts[agent.agent_id] === 1 ? '' : 's'} registered`}
+                        >
+                          <span className="agent-stat-value mono">
+                            <span className="agent-stat-shield" aria-hidden="true">🛡</span>
+                            {guardrailCounts[agent.agent_id]}
+                          </span>
+                          <span className="agent-stat-label">guards</span>
+                        </div>
                       )}
-                    </React.Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                    <div className="agent-card-foot text-muted">
+                      Last seen {formatRelative(agent.last_seen)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
       )}
+
+      <AgentDetailPanel
+        agent={selected}
+        onClose={() => setSelected(null)}
+        placement="bottom"
+      />
     </div>
   )
 }

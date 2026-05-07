@@ -20,9 +20,14 @@
       "workspace": "~/.openclaw/workspace",
       "model": { "primary": "anthropic/claude-sonnet-4-6" },
       "tools": { "allow": ["web_fetch", "read_file"] },
-      "contentFilter": { "enabled": true }
+      "contentFilter": { "enabled": true },
+      "sandbox": { "mode": "non-main" },
+      "subagents": { "allowAgents": ["main"], "maxSpawnDepth": 1 }
     },
     "list": [{ "id": "main", "default": true }]
+  },
+  "browser": {
+    "ssrfPolicy": { "dangerouslyAllowPrivateNetwork": false }
   },
   "tools": {
     "profile": "coding",

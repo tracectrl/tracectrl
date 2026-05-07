@@ -300,7 +300,6 @@ def _get_agent_ids_for_service(service: str) -> set[str]:
     ids = set()
     for row in rows:
         tc_id, agno_id, agent_name, span_name = row[0], row[1], row[2], row[3]
-        oc_channel = row[4] if len(row) > 4 else ""
         agent_id = tc_id or agno_id
         if not agent_id:
             if span_name.startswith("openclaw."):

@@ -150,7 +150,7 @@ export default function AttackFindingsPanel({ paths, selectedPath, onPathSelect,
       widthPx={520}
     >
       <header className="drawer-header">
-        <h3 className="drawer-title" style={{ margin: 0, fontSize: 16 }}>Attack Surface Findings</h3>
+        <h3 className="drawer-title" style={{ margin: 0 }}>Attack Surface Findings</h3>
         <div style={{ marginLeft: 'auto' }}>
           <DrawerClose onClose={onClose} />
         </div>

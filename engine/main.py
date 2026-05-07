@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from engine.scheduler import start_scheduler, stop_scheduler
-from engine.api.routes import topology, system, sessions, agents, risk, scan as scan_routes
+from engine.api.routes import topology, system, sessions, agents, risk, scan as scan_routes, violations, guardrails
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -40,3 +40,5 @@ app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(agents.router, prefix="/api/v1")
 app.include_router(risk.router, prefix="/api/v1")
 app.include_router(scan_routes.router, prefix="/api/v1")
+app.include_router(violations.router, prefix="/api/v1")
+app.include_router(guardrails.router, prefix="/api/v1")

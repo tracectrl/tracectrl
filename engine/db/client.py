@@ -85,6 +85,41 @@ def ensure_schema() -> None:
   profile        String DEFAULT 'L1'
 ) ENGINE = ReplacingMergeTree()
 ORDER BY (scan_id)""",
+        f"""CREATE TABLE IF NOT EXISTS {db}.guardrail_violations (
+            violation_id     String,
+            trace_id         String,
+            span_id          String,
+            eval_span_id     String,
+            agent_id         String,
+            guardrail_name   String,
+            judge_model      String,
+            decision         Enum8('pass'=0, 'fail'=1, 'error'=2),
+            reason           String,
+            evidence         String,
+            severity         Enum8('low'=0, 'medium'=1, 'high'=2, 'critical'=3),
+            observed_at      DateTime64(3, 'UTC'),
+            inserted_at      DateTime64(3, 'UTC')
+        ) ENGINE = ReplacingMergeTree()
+        ORDER BY (observed_at, violation_id)""",
+        f"""CREATE TABLE IF NOT EXISTS {db}.guardrail_registry (
+            agent_id            String,
+            guardrail_name      String,
+            severity            Enum8('low'=0, 'medium'=1, 'high'=2, 'critical'=3),
+            mode                Enum8('monitoring'=0, 'blocking'=1),
+            timing              Enum8('post_output'=0, 'pre_input'=1),
+            judge_model         String,
+            description         String,
+            judge_prompt        String,
+            health              Enum8('active'=0, 'error'=1, 'disabled'=2),
+            health_reason       String,
+            registered_at       DateTime64(3, 'UTC'),
+            last_seen_at        DateTime64(3, 'UTC'),
+            inserted_at         DateTime64(3, 'UTC')
+        ) ENGINE = ReplacingMergeTree(last_seen_at)
+        ORDER BY (agent_id, guardrail_name)""",
+        # Add column for existing deployments — IF NOT EXISTS keeps this idempotent
+        # for fresh installs (the CREATE above already includes it).
+        "ALTER TABLE tracectrl.guardrail_registry ADD COLUMN IF NOT EXISTS judge_prompt String AFTER description",
     ]
     client = get_client()
     for stmt in stmts:

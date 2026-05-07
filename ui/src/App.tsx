@@ -1,28 +1,43 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
-import TopologyGraph from './pages/TopologyGraph'
-import Sessions from './pages/Sessions'
-import Agents from './pages/Agents'
-import TraceDetail from './pages/TraceDetail'
-import RiskDashboard from './pages/RiskDashboard'
-import AttackPaths from './pages/AttackPaths'
-import ScanReport from './pages/ScanReport'
-import SetupPage from './pages/SetupPage'
 import { ProjectProvider, useProject } from './context/ProjectContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
+import { ToastProvider } from './components/ToastProvider'
+import { ViolationsProvider, useViolationsContext } from './context/ViolationsContext'
+
+// Eagerly load the default landing page for instant first paint.
+import Agents from './pages/Agents'
+
+// All other pages load only when the user navigates to them.
+// Cytoscape-heavy pages (Topology, Scan, Attacks) share one lazy boundary
+// so the 441 KB Cytoscape chunk is fetched at most once, on first visit.
+const TopologyGraph  = lazy(() => import('./pages/TopologyGraph'))
+const Sessions       = lazy(() => import('./pages/Sessions'))
+const TraceDetail    = lazy(() => import('./pages/TraceDetail'))
+const RiskDashboard  = lazy(() => import('./pages/RiskDashboard'))
+const AttackPaths    = lazy(() => import('./pages/AttackPaths'))
+const ScanReport     = lazy(() => import('./pages/ScanReport'))
+const SetupPage      = lazy(() => import('./pages/SetupPage'))
+const Alerts         = lazy(() => import('./pages/Alerts'))
+const Guardrails     = lazy(() => import('./pages/Guardrails'))
 
 function Sidebar() {
   const location = useLocation()
   const { projects, selectedProject, setSelectedProject, loading: projectsLoading } = useProject()
   const { theme, toggleTheme } = useTheme()
 
+  const { unreadCount } = useViolationsContext()
+
   const navItems = [
-    { href: '/topology', label: 'Topology' },
-    { href: '/sessions', label: 'Sessions' },
     { href: '/agents', label: 'Agents' },
+    { href: '/sessions', label: 'Sessions' },
+    { href: '/topology', label: 'Topology' },
+    { href: '/alerts', label: 'Alerts', showUnread: true },
+    { href: '/guardrails', label: 'Guardrails' },
     { href: '/scan', label: 'Scan Report' },
     { href: '/risk', label: 'Risk Dashboard' },
     { href: '/attacks', label: 'Attack Paths' },
-  ]
+  ] as const
 
   return (
     <nav className="sidebar">
@@ -67,15 +82,26 @@ function Sidebar() {
       ))}
 
       <div className="sidebar-section-label">Security</div>
-      {navItems.slice(3).map(item => (
-        <Link
-          key={item.href}
-          to={item.href}
-          className={`nav-link${location.pathname === item.href || location.pathname.startsWith(item.href + '/') ? ' active' : ''}`}
-        >
-          {item.label}
-        </Link>
-      ))}
+      {navItems.slice(3).map(item => {
+        const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
+        const showBadge = 'showUnread' in item && item.showUnread && unreadCount > 0
+        return (
+          <Link
+            key={item.href}
+            to={item.href}
+            className={`nav-link${isActive ? ' active' : ''}`}
+          >
+            <span className="nav-link-label">{item.label}</span>
+            {showBadge && (
+              <span
+                className="nav-unread-dot"
+                aria-label={`${unreadCount} unread alerts`}
+                title={`${unreadCount} unread`}
+              />
+            )}
+          </Link>
+        )
+      })}
 
       <div className="sidebar-footer">
         <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
@@ -93,23 +119,31 @@ function App() {
     <BrowserRouter>
       <ThemeProvider>
       <ProjectProvider>
+        <ToastProvider>
+        <ViolationsProvider>
         <div className="layout">
           <a href="#main-content" className="sr-only">Skip to main content</a>
           <Sidebar />
           <main id="main-content" className="main-content">
-            <Routes>
-              <Route path="/" element={<Navigate to="/topology" replace />} />
-              <Route path="/topology" element={<TopologyGraph />} />
-              <Route path="/sessions" element={<Sessions />} />
-              <Route path="/sessions/:traceId" element={<TraceDetail />} />
-              <Route path="/agents" element={<Agents />} />
-              <Route path="/risk" element={<RiskDashboard />} />
-              <Route path="/attacks" element={<AttackPaths />} />
-              <Route path="/setup" element={<SetupPage />} />
-              <Route path="/scan" element={<ScanReport />} />
-            </Routes>
+            <Suspense fallback={<div className="page-loading-skeleton" aria-label="Loading page" />}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/agents" replace />} />
+                <Route path="/topology" element={<TopologyGraph />} />
+                <Route path="/sessions" element={<Sessions />} />
+                <Route path="/sessions/:traceId" element={<TraceDetail />} />
+                <Route path="/agents" element={<Agents />} />
+                <Route path="/alerts" element={<Alerts />} />
+                <Route path="/guardrails" element={<Guardrails />} />
+                <Route path="/risk" element={<RiskDashboard />} />
+                <Route path="/attacks" element={<AttackPaths />} />
+                <Route path="/setup" element={<SetupPage />} />
+                <Route path="/scan" element={<ScanReport />} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
+        </ViolationsProvider>
+        </ToastProvider>
       </ProjectProvider>
       </ThemeProvider>
     </BrowserRouter>

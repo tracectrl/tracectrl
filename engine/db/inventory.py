@@ -78,8 +78,12 @@ def update_agent_inventory(spans: list[dict]):
             agent["tools_observed"].add(span["tool_name"])
         if span.get("llm_model_name"):
             agent["model"] = span["llm_model_name"]
-        if span.get("llm_system"):
-            agent["system_prompt"] = span["llm_system"]
+        # tc_system_prompt is the authoritative source: set by tag_agent's
+        # SpanProcessor, or extracted from a `system`-role message on LLM
+        # spans. The legacy `llm_system` key is the PROVIDER NAME (per
+        # OpenInference / GenAI semconv), not the prompt — never use it.
+        if span.get("tc_system_prompt"):
+            agent["system_prompt"] = span["tc_system_prompt"]
             agent["system_prompt_hash"] = span.get("tc_system_prompt_hash", "")
 
     now = datetime.utcnow()
@@ -112,7 +116,7 @@ def get_all_agents(service: str | None = None) -> list[dict]:
     rows = execute(
         """
         SELECT agent_id, name, framework, role, model,
-               tools_observed, system_prompt_hash, run_count,
+               tools_observed, system_prompt, system_prompt_hash, run_count,
                observation_count, maturity, first_seen, last_seen
         FROM agent_inventory FINAL
         ORDER BY last_seen DESC
@@ -120,10 +124,36 @@ def get_all_agents(service: str | None = None) -> list[dict]:
     )
     columns = [
         "agent_id", "name", "framework", "role", "model",
-        "tools_observed", "system_prompt_hash", "run_count",
+        "tools_observed", "system_prompt", "system_prompt_hash", "run_count",
         "observation_count", "maturity", "first_seen", "last_seen",
     ]
     results = [dict(zip(columns, row)) for row in rows]
+
+    # Pull per-tool call counts from topology_tool_edges (single grouped query
+    # so we don't fan out N SELECTs across agents).
+    tool_rows = execute(
+        """
+        SELECT agent_id, tool_name, sum(call_count) AS calls
+        FROM topology_tool_edges FINAL
+        GROUP BY agent_id, tool_name
+        """
+    )
+    counts_by_agent: dict[str, dict[str, int]] = {}
+    totals_by_agent: dict[str, int] = {}
+    for agent_id, tool_name, calls in tool_rows:
+        counts_by_agent.setdefault(agent_id, {})[tool_name] = int(calls or 0)
+        totals_by_agent[agent_id] = totals_by_agent.get(agent_id, 0) + int(calls or 0)
+    for r in results:
+        agent_counts = counts_by_agent.get(r["agent_id"], {})
+        r["tool_call_counts"] = agent_counts
+        r["total_tool_calls"] = totals_by_agent.get(r["agent_id"], 0)
+        # Strands agents don't carry tool_name on their own AGENT spans, so the
+        # stored tools_observed column is empty. The authoritative tool list
+        # lives in topology_tool_edges; merge it in so UI counts match reality.
+        edge_tools = set(agent_counts.keys())
+        if edge_tools:
+            existing = set(r.get("tools_observed") or [])
+            r["tools_observed"] = sorted(existing | edge_tools)
 
     if service:
         svc_rows = execute(
@@ -171,7 +201,7 @@ def get_agent_by_id(agent_id: str) -> dict | None:
     rows = execute(
         """
         SELECT agent_id, name, framework, role, model,
-               tools_observed, system_prompt_hash, run_count,
+               tools_observed, system_prompt, system_prompt_hash, run_count,
                observation_count, maturity, first_seen, last_seen
         FROM agent_inventory FINAL
         WHERE agent_id = %(id)s
@@ -182,7 +212,18 @@ def get_agent_by_id(agent_id: str) -> dict | None:
         return None
     columns = [
         "agent_id", "name", "framework", "role", "model",
-        "tools_observed", "system_prompt_hash", "run_count",
+        "tools_observed", "system_prompt", "system_prompt_hash", "run_count",
         "observation_count", "maturity", "first_seen", "last_seen",
     ]
-    return dict(zip(columns, rows[0]))
+    result = dict(zip(columns, rows[0]))
+    # Same edge-merge as get_all_agents: tool list authority lives in
+    # topology_tool_edges, not in agent_inventory.tools_observed.
+    edge_rows = execute(
+        "SELECT tool_name FROM topology_tool_edges FINAL WHERE agent_id = %(id)s",
+        {"id": agent_id},
+    )
+    edge_tools = {r[0] for r in edge_rows if r[0]}
+    if edge_tools:
+        existing = set(result.get("tools_observed") or [])
+        result["tools_observed"] = sorted(existing | edge_tools)
+    return result

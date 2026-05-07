@@ -4,8 +4,6 @@ import hashlib
 import logging
 import os
 import re
-import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4

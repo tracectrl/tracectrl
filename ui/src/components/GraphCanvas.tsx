@@ -4,6 +4,7 @@ import dagre from 'cytoscape-dagre'
 import { TopologyGraph, TopologyNode, AttackOverlay, AttackPath } from '../api/client'
 import { AgentRisk } from '../api/risk'
 import { PhaseGroup } from '../hooks/usePhaseInference'
+import { useTheme } from '../context/ThemeContext'
 
 cytoscape.use(dagre)
 
@@ -18,6 +19,7 @@ interface GraphCanvasProps {
   attackMode?: boolean
   overlay?: AttackOverlay | null
   selectedAttackPath?: AttackPath | null
+  guardedAgentIds?: Set<string>
 }
 
 /**
@@ -116,13 +118,27 @@ function buildElements(
   return elements
 }
 
+function buildThemeColors(isDark: boolean) {
+  return {
+    agentFill:    isDark ? '#010D1C' : '#EBF4FF',
+    toolFill:     isDark ? '#001A0A' : '#EDFFF3',
+    ingressFill:  isDark ? '#001A22' : '#E8FAFF',
+    labelColor:   isDark ? '#A8C0D6' : '#1E3A5C',
+    textBg:       isDark ? '#050810' : 'rgba(255,255,255,0.92)',
+    edgeLabelBg:  isDark ? '#0A0A0A' : 'rgba(255,255,255,0.92)',
+    edgeLabelClr: isDark ? '#AAAAAA' : '#444444',
+    phaseText:    isDark ? '#8BC4BF' : '#2D6B65',
+  }
+}
+
 export default function GraphCanvas({
-  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks, attackMode, overlay, selectedAttackPath
+  data, onNodeSelect, highlightedNodeIds, phaseGroups, showPhases, attackerView, agentRisks, attackMode, overlay, selectedAttackPath, guardedAgentIds
 }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
   const onNodeSelectRef = useRef(onNodeSelect)
   onNodeSelectRef.current = onNodeSelect
+  const { theme } = useTheme()
 
   // State for toggling return edges (show them in attack mode, hide by default otherwise)
   const [showReturnEdges, setShowReturnEdges] = useState(false)
@@ -134,7 +150,7 @@ export default function GraphCanvas({
     }
   }, [attackMode])
 
-  // Rebuild the graph when data OR showPhases changes
+  // Rebuild the graph when data OR showPhases OR theme changes
   // (showPhases changes the element structure — compound nodes)
   // Always include return edges but control visibility with styles
   useEffect(() => {
@@ -147,6 +163,8 @@ export default function GraphCanvas({
 
     // Build topology elements
     const elements = buildElements(data, phaseGroups, !!showPhases)
+    const isDark = theme === 'dark'
+    const c = buildThemeColors(isDark)
 
     cyRef.current = cytoscape({
       container: containerRef.current,
@@ -156,15 +174,15 @@ export default function GraphCanvas({
         {
           selector: 'node[nodeType="phase"]',
           style: {
-            'background-color': 'rgba(64, 112, 108, 0.08)',
+            'background-color': isDark ? 'rgba(64, 112, 108, 0.08)' : 'rgba(64, 112, 108, 0.06)',
             'background-opacity': 1,
             'border-width': 1.5,
-            'border-color': 'rgba(64, 112, 108, 0.4)',
+            'border-color': isDark ? 'rgba(64, 112, 108, 0.4)' : 'rgba(64, 112, 108, 0.3)',
             'border-style': 'solid',
             'shape': 'round-rectangle',
             'padding': '24px',
             'label': 'data(label)',
-            'color': '#8BC4BF',
+            'color': c.phaseText,
             'font-size': '11px',
             'font-weight': 700,
             'font-family': "'JetBrains Mono', monospace",
@@ -177,9 +195,9 @@ export default function GraphCanvas({
         {
           selector: 'node[nodeType="agent"]',
           style: {
-            'background-color': '#010D1C',
+            'background-color': c.agentFill,
             'label': 'data(label)',
-            'color': '#A8C0D6',
+            'color': c.labelColor,
             'font-size': '12px',
             'font-weight': 600,
             'font-family': "'Poppins', sans-serif",
@@ -188,7 +206,7 @@ export default function GraphCanvas({
             'text-wrap': 'wrap',
             'text-max-width': '120px',
             'text-margin-y': 9,
-            'text-background-color': '#050810',
+            'text-background-color': c.textBg,
             'text-background-opacity': 0.9,
             'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle',
@@ -205,9 +223,9 @@ export default function GraphCanvas({
         {
           selector: 'node[nodeType="tool"]',
           style: {
-            'background-color': '#001A0A',
+            'background-color': c.toolFill,
             'label': 'data(label)',
-            'color': '#A8C0D6',
+            'color': c.labelColor,
             'font-size': '11px',
             'font-weight': 500,
             'font-family': "'JetBrains Mono', monospace",
@@ -216,7 +234,7 @@ export default function GraphCanvas({
             'text-wrap': 'wrap',
             'text-max-width': '100px',
             'text-margin-y': 9,
-            'text-background-color': '#050810',
+            'text-background-color': c.textBg,
             'text-background-opacity': 0.9,
             'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle',
@@ -233,9 +251,9 @@ export default function GraphCanvas({
         {
           selector: 'node[nodeType="ingress"]',
           style: {
-            'background-color': '#001A22',
+            'background-color': c.ingressFill,
             'label': 'data(label)',
-            'color': '#A8C0D6',
+            'color': c.labelColor,
             'font-size': '11px',
             'font-weight': 600,
             'font-family': "'JetBrains Mono', monospace",
@@ -244,7 +262,7 @@ export default function GraphCanvas({
             'text-wrap': 'wrap',
             'text-max-width': '100px',
             'text-margin-y': 9,
-            'text-background-color': '#050810',
+            'text-background-color': c.textBg,
             'text-background-opacity': 0.9,
             'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle',
@@ -273,10 +291,10 @@ export default function GraphCanvas({
             'font-size': '11px',
             'font-weight': 600,
             'font-family': "'JetBrains Mono', monospace",
-            'color': '#8BC4BF',
+            'color': c.phaseText,
             'text-rotation': 'autorotate',
             'text-margin-y': -12,
-            'text-background-color': '#0A0A0A',
+            'text-background-color': c.edgeLabelBg,
             'text-background-opacity': 0.85,
             'text-background-padding': '4px',
             'text-background-shape': 'roundrectangle' as any,
@@ -286,8 +304,8 @@ export default function GraphCanvas({
         {
           selector: 'edge[edgeType="agent_to_agent"]',
           style: {
-            'line-color': '#AAAAAA',
-            'target-arrow-color': '#AAAAAA',
+            'line-color': c.edgeLabelClr,
+            'target-arrow-color': c.edgeLabelClr,
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
             'width': 2,
@@ -295,10 +313,10 @@ export default function GraphCanvas({
             'label': 'data(edgeLabel)',
             'font-size': '10px',
             'font-family': "'Poppins', sans-serif",
-            'color': '#AAAAAA',
+            'color': c.edgeLabelClr,
             'text-rotation': 'autorotate',
             'text-margin-y': -10,
-            'text-background-color': '#0A0A0A',
+            'text-background-color': c.edgeLabelBg,
             'text-background-opacity': 0.8,
             'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle' as any,
@@ -308,22 +326,22 @@ export default function GraphCanvas({
         {
           selector: 'edge[edgeType="agent_return"]',
           style: {
-            'line-color': '#888888',
-            'target-arrow-color': '#888888',
+            'line-color': isDark ? '#888888' : '#999999',
+            'target-arrow-color': isDark ? '#888888' : '#999999',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
             'line-style': 'dashed',
             'line-dash-pattern': [5, 5],
             'width': 1.5,
             'opacity': 0.5,
-            'display': 'none',  // Hidden by default, shown when showReturnEdges=true
+            'display': 'none',
             'label': 'data(edgeLabel)',
             'font-size': '9px',
             'font-family': "'Poppins', sans-serif",
-            'color': '#888888',
+            'color': c.edgeLabelClr,
             'text-rotation': 'autorotate',
             'text-margin-y': -10,
-            'text-background-color': '#0A0A0A',
+            'text-background-color': c.edgeLabelBg,
             'text-background-opacity': 0.7,
             'text-background-padding': '2px',
             'text-background-shape': 'roundrectangle' as any,
@@ -333,8 +351,8 @@ export default function GraphCanvas({
         {
           selector: 'edge[edgeType="tool_return"]',
           style: {
-            'line-color': '#999999',
-            'target-arrow-color': '#999999',
+            'line-color': isDark ? '#999999' : '#AAAAAA',
+            'target-arrow-color': isDark ? '#999999' : '#AAAAAA',
             'target-arrow-shape': 'triangle',
             'curve-style': 'unbundled-bezier',
             'control-point-distances': 30,
@@ -343,25 +361,25 @@ export default function GraphCanvas({
             'line-dash-pattern': [5, 5],
             'width': 1.5,
             'opacity': 0.5,
-            'display': 'none',  // Hidden by default, shown when showReturnEdges=true
+            'display': 'none',
             'label': 'data(edgeLabel)',
             'font-size': '9px',
             'font-family': "'Poppins', sans-serif",
-            'color': '#999999',
+            'color': c.edgeLabelClr,
             'text-rotation': 'autorotate',
             'text-margin-y': -10,
-            'text-background-color': '#0A0A0A',
+            'text-background-color': c.edgeLabelBg,
             'text-background-opacity': 0.7,
             'text-background-padding': '2px',
             'text-background-shape': 'roundrectangle' as any,
           },
         },
-        // Agent-to-tool edges — dashed, white arrows
+        // Agent-to-tool edges — dashed arrows
         {
           selector: 'edge[edgeType="agent_to_tool"]',
           style: {
-            'line-color': '#CCCCCC',
-            'target-arrow-color': '#CCCCCC',
+            'line-color': c.edgeLabelClr,
+            'target-arrow-color': c.edgeLabelClr,
             'target-arrow-shape': 'triangle',
             'curve-style': 'straight',
             'line-style': 'dashed',
@@ -371,10 +389,10 @@ export default function GraphCanvas({
             'label': 'data(edgeLabel)',
             'font-size': '10px',
             'font-family': "'Poppins', sans-serif",
-            'color': '#CCCCCC',
+            'color': c.edgeLabelClr,
             'text-rotation': 'autorotate',
             'text-margin-y': -10,
-            'text-background-color': '#0A0A0A',
+            'text-background-color': c.edgeLabelBg,
             'text-background-opacity': 0.8,
             'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle' as any,
@@ -397,7 +415,7 @@ export default function GraphCanvas({
             'color': '#F97316',
             'text-rotation': 'autorotate',
             'text-margin-y': -10,
-            'text-background-color': '#0A0A0A',
+            'text-background-color': c.edgeLabelBg,
             'text-background-opacity': 0.85,
             'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle' as any,
@@ -488,7 +506,7 @@ export default function GraphCanvas({
       cyRef.current?.destroy()
       cyRef.current = null
     }
-  }, [data, showPhases, phaseGroups])  // Removed showReturnEdges and attackMode - we handle them separately
+  }, [data, showPhases, phaseGroups, theme])
 
   // Toggle return edge visibility without rebuilding graph
   useEffect(() => {
@@ -572,6 +590,40 @@ export default function GraphCanvas({
     }
     cy.endBatch()
   }, [attackerView, agentRisks])
+
+  // Guarded-agent styling: visualises agents with >=1 active guardrail.
+  // Approach chosen: thicker green outline as a fallback (Cytoscape inline
+  // SVG markers proved fiddly to layer over the existing per-nodeType styles
+  // without breaking attacker-view / attack-mode overrides). When attackMode
+  // or attackerView is active, those modes own border styling, so we skip.
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+    if (attackMode || attackerView) return
+
+    cy.startBatch()
+    cy.nodes().forEach((node) => {
+      const nodeType = node.data('nodeType') as string
+      if (nodeType !== 'agent') return
+      const id = node.data('id') as string
+      const label = node.data('label') as string
+      const labelKey = label?.toLowerCase().replace(/\s+/g, '-')
+      const isGuarded = !!guardedAgentIds && (
+        guardedAgentIds.has(id) ||
+        (labelKey ? guardedAgentIds.has(labelKey) : false)
+      )
+      if (isGuarded) {
+        node.style('border-color', '#22C55E')
+        node.style('border-width', 4)
+        node.data('guarded', true)
+      } else {
+        node.style('border-color', '#4D9EFF')
+        node.style('border-width', 2.5)
+        node.removeData('guarded')
+      }
+    })
+    cy.endBatch()
+  }, [guardedAgentIds, attackMode, attackerView, data])
 
   // Attack mode styling effect
   useEffect(() => {

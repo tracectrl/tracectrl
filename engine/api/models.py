@@ -24,6 +24,9 @@ class AgentSummary(BaseModel):
     role: str
     model: str
     tools_observed: list[str]
+    tool_call_counts: dict[str, int] = {}  # tool_name -> total invocations
+    total_tool_calls: int = 0
+    system_prompt: str = ""
     system_prompt_hash: str
     run_count: int
     observation_count: int
@@ -89,3 +92,34 @@ class RiskSummary(BaseModel):
     agents_at_risk: int
     learning_agents: int
     computed_at: datetime
+
+
+class Violation(BaseModel):
+    violation_id: str
+    trace_id: str
+    span_id: str
+    eval_span_id: str
+    agent_id: str
+    guardrail_name: str
+    judge_model: str
+    decision: str   # one of pass/fail/error
+    reason: str
+    evidence: str
+    severity: str   # one of critical/high/medium/low
+    observed_at: datetime
+
+
+class GuardrailRegistration(BaseModel):
+    agent_id: str
+    guardrail_name: str
+    severity: str        # low|medium|high|critical
+    mode: str            # monitoring|blocking
+    timing: str          # post_output|pre_input
+    judge_model: str
+    description: str
+    judge_prompt: str = ""
+    health: str          # active|error|disabled
+    health_reason: str
+    registered_at: datetime
+    last_seen_at: datetime
+    recent_activity_24h: int = 0
