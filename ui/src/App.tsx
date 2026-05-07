@@ -1,18 +1,25 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
-import TopologyGraph from './pages/TopologyGraph'
-import Sessions from './pages/Sessions'
-import Agents from './pages/Agents'
-import TraceDetail from './pages/TraceDetail'
-import RiskDashboard from './pages/RiskDashboard'
-import AttackPaths from './pages/AttackPaths'
-import ScanReport from './pages/ScanReport'
-import SetupPage from './pages/SetupPage'
-import Alerts from './pages/Alerts'
-import Guardrails from './pages/Guardrails'
 import { ProjectProvider, useProject } from './context/ProjectContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { ToastProvider } from './components/ToastProvider'
 import { ViolationsProvider, useViolationsContext } from './context/ViolationsContext'
+
+// Eagerly load the default landing page for instant first paint.
+import Agents from './pages/Agents'
+
+// All other pages load only when the user navigates to them.
+// Cytoscape-heavy pages (Topology, Scan, Attacks) share one lazy boundary
+// so the 441 KB Cytoscape chunk is fetched at most once, on first visit.
+const TopologyGraph  = lazy(() => import('./pages/TopologyGraph'))
+const Sessions       = lazy(() => import('./pages/Sessions'))
+const TraceDetail    = lazy(() => import('./pages/TraceDetail'))
+const RiskDashboard  = lazy(() => import('./pages/RiskDashboard'))
+const AttackPaths    = lazy(() => import('./pages/AttackPaths'))
+const ScanReport     = lazy(() => import('./pages/ScanReport'))
+const SetupPage      = lazy(() => import('./pages/SetupPage'))
+const Alerts         = lazy(() => import('./pages/Alerts'))
+const Guardrails     = lazy(() => import('./pages/Guardrails'))
 
 function Sidebar() {
   const location = useLocation()
@@ -118,19 +125,21 @@ function App() {
           <a href="#main-content" className="sr-only">Skip to main content</a>
           <Sidebar />
           <main id="main-content" className="main-content">
-            <Routes>
-              <Route path="/" element={<Navigate to="/agents" replace />} />
-              <Route path="/topology" element={<TopologyGraph />} />
-              <Route path="/sessions" element={<Sessions />} />
-              <Route path="/sessions/:traceId" element={<TraceDetail />} />
-              <Route path="/agents" element={<Agents />} />
-              <Route path="/alerts" element={<Alerts />} />
-              <Route path="/guardrails" element={<Guardrails />} />
-              <Route path="/risk" element={<RiskDashboard />} />
-              <Route path="/attacks" element={<AttackPaths />} />
-              <Route path="/setup" element={<SetupPage />} />
-              <Route path="/scan" element={<ScanReport />} />
-            </Routes>
+            <Suspense fallback={<div className="page-loading-skeleton" aria-label="Loading page" />}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/agents" replace />} />
+                <Route path="/topology" element={<TopologyGraph />} />
+                <Route path="/sessions" element={<Sessions />} />
+                <Route path="/sessions/:traceId" element={<TraceDetail />} />
+                <Route path="/agents" element={<Agents />} />
+                <Route path="/alerts" element={<Alerts />} />
+                <Route path="/guardrails" element={<Guardrails />} />
+                <Route path="/risk" element={<RiskDashboard />} />
+                <Route path="/attacks" element={<AttackPaths />} />
+                <Route path="/setup" element={<SetupPage />} />
+                <Route path="/scan" element={<ScanReport />} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
         </ViolationsProvider>

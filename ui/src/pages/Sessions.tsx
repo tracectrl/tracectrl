@@ -20,6 +20,7 @@ export default function Sessions() {
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null)
   const [expandedSpans, setExpandedSpans] = useState<SpanDetail[]>([])
   const [expandedLoading, setExpandedLoading] = useState(false)
+  const [expandedError, setExpandedError] = useState<string | null>(null)
   const [selectedSpan, setSelectedSpan] = useState<SpanDetail | null>(null)
 
   useEffect(() => { document.title = 'Sessions — TraceCtrl' }, [])
@@ -42,7 +43,7 @@ export default function Sessions() {
       if (sortKey === 'start_time') cmp = a.start_time.localeCompare(b.start_time)
       else if (sortKey === 'total_duration_ns') cmp = a.total_duration_ns - b.total_duration_ns
       else if (sortKey === 'span_count') cmp = a.span_count - b.span_count
-      else if (sortKey === 'root_span_name') cmp = a.root_span_name.localeCompare(b.root_span_name)
+      else if (sortKey === 'root_span_name') cmp = (a.root_span_name ?? '').localeCompare(b.root_span_name ?? '')
       return sortDir === 'asc' ? cmp : -cmp
     })
     return copy
@@ -71,13 +72,17 @@ export default function Sessions() {
     }
     setExpandedTraceId(traceId)
     setExpandedLoading(true)
+    setExpandedError(null)
     setSelectedSpan(null)
     const allTraceIds = session.extra_trace_ids && session.extra_trace_ids.length > 0
       ? [traceId, ...session.extra_trace_ids]
       : [traceId]
     Promise.all(allTraceIds.map(tid => fetchTraceSpans(tid)))
       .then(results => setExpandedSpans(results.flat()))
-      .catch(() => setExpandedSpans([]))
+      .catch(err => {
+        setExpandedSpans([])
+        setExpandedError(err instanceof Error ? err.message : 'Failed to load spans')
+      })
       .finally(() => setExpandedLoading(false))
   }, [expandedTraceId])
 
@@ -200,6 +205,18 @@ export default function Sessions() {
                                   {[...Array(4)].map((_, i) => (
                                     <div key={i} className="loading-skeleton" style={{ height: 32, marginBottom: 2 }} />
                                   ))}
+                                </div>
+                              ) : expandedError ? (
+                                <div style={{ padding: 'var(--space-4)' }}>
+                                  <div className="error-banner" role="alert">
+                                    <span className="error-banner-text">{expandedError}</span>
+                                    <button
+                                      className="btn btn-ghost btn-sm error-banner-retry"
+                                      onClick={() => handleRowActivate(session)}
+                                    >
+                                      Retry
+                                    </button>
+                                  </div>
                                 </div>
                               ) : (
                                 <>

@@ -89,8 +89,6 @@ export function computeScanDiff(
       if (key === 'token_tail' || key === 'api_key_tail' || key === 'credential_tail') continue
       if (key === 'soul_excerpt') continue
 
-      console.log(`Property "${key}" changed for ${id}:`, oldValue, '->', newValue)
-
       nodeChanges.push({
         nodeId: id,
         label: newNode.label,

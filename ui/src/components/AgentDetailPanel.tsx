@@ -163,7 +163,7 @@ export default function AgentDetailPanel({ agent, onClose, placement = 'right' }
                         {copied ? '✓ Copied' : 'Copy prompt'}
                       </button>
                       {agent.system_prompt_hash && (
-                        <span className="text-muted mono" style={{ fontSize: 12 }}>
+                        <span className="text-muted mono" style={{ fontSize: 'var(--text-xs, 11px)' }}>
                           {agent.system_prompt_hash.slice(0, 12)}
                         </span>
                       )}

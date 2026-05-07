@@ -80,7 +80,8 @@ export default function Alerts() {
     <div className="alerts-page">
       <header className="alerts-header">
         <div>
-          <h2 style={{ margin: 0 }}>Alerts</h2>
+          <div className="section-tag">Security</div>
+          <h2 style={{ margin: '4px 0 0' }}>Alerts</h2>
           <p className="alerts-subtitle">
             {totalCount} {totalCount === 1 ? 'violation' : 'violations'}
             {filtered.length !== totalCount && ` · ${filtered.length} shown`}
@@ -216,12 +217,19 @@ export default function Alerts() {
   )
 }
 
+const EVIDENCE_MAX_CHARS = 6000
+
 function prettyEvidence(raw: string): string {
   if (!raw) return '—'
+  let out: string
   try {
     const parsed = JSON.parse(raw)
-    return JSON.stringify(parsed, null, 2)
+    out = JSON.stringify(parsed, null, 2)
   } catch {
-    return raw
+    out = raw
   }
+  if (out.length > EVIDENCE_MAX_CHARS) {
+    return out.slice(0, EVIDENCE_MAX_CHARS) + `\n\n… (truncated — ${out.length.toLocaleString()} chars total)`
+  }
+  return out
 }

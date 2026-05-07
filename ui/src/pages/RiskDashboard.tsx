@@ -92,35 +92,23 @@ export default function RiskDashboard() {
       ) : (
         <>
           {summary && (
-            <div className="stat-card risk-hero" style={{ textAlign: 'center', marginBottom: 'var(--space-4)', padding: 'var(--space-4)' }}>
-              <div className="stat-value stat-value-hero" style={{ color: severityColor(summary.severity) }}>
-                {summary.risk_score}
-              </div>
-              <div className="stat-label" style={{ color: severityColor(summary.severity) }}>
-                {summary.severity.toUpperCase()} RISK
-              </div>
-            </div>
-          )}
-
-          {summary && (
             <div className="card-grid cols-4" style={{ marginBottom: 'var(--space-6)' }}>
               <div className="stat-card">
-                <div className="stat-value">{summary.critical_paths}</div>
+                <div className="stat-label">Risk Score</div>
+                <div className="stat-value mono">{summary.risk_score}</div>
+                <span className={`badge ${severityBadgeClass(summary.severity)}`}>{summary.severity.toUpperCase()}</span>
+              </div>
+              <div className="stat-card">
                 <div className="stat-label">Critical Paths</div>
+                <div className="stat-value">{summary.critical_paths}</div>
               </div>
               <div className="stat-card">
-                <div className="stat-value">{summary.agents_at_risk}</div>
                 <div className="stat-label">Agents at Risk</div>
+                <div className="stat-value">{summary.agents_at_risk}</div>
               </div>
               <div className="stat-card">
-                <div className="stat-value">{summary.learning_agents}</div>
                 <div className="stat-label">Learning Agents</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-value" style={{ color: severityColor(summary.severity) }}>
-                  {summary.severity.toUpperCase()}
-                </div>
-                <div className="stat-label">Overall Severity</div>
+                <div className="stat-value">{summary.learning_agents}</div>
               </div>
             </div>
           )}

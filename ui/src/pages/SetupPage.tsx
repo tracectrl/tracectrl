@@ -4,6 +4,8 @@ import FindingsSection from '../components/findings/FindingsSection'
 
 type FlowState = 'path_entry' | 'validating' | 'scanning' | 'results'
 
+const MAX_POLL_ERRORS = 3
+
 export default function SetupPage() {
   useEffect(() => { document.title = 'Setup — TraceCtrl' }, [])
 
@@ -15,6 +17,7 @@ export default function SetupPage() {
   const [elapsed, setElapsed] = useState(0)
   const [scanData, setScanData] = useState<ScanDetail | null>(null)
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollErrorCount = useRef(0)
 
   useEffect(() => {
     if (state === 'scanning') {
@@ -28,9 +31,11 @@ export default function SetupPage() {
 
   useEffect(() => {
     if (state !== 'scanning' || !activeScanId) return
+    pollErrorCount.current = 0
     const poll = setInterval(async () => {
       try {
         const status = await pollScanStatus(activeScanId)
+        pollErrorCount.current = 0
         if (status.status === 'complete') {
           clearInterval(poll)
           const data = await fetchLatestScan()
@@ -41,8 +46,13 @@ export default function SetupPage() {
           setScanError(status.error || 'Scan failed')
           setState('path_entry')
         }
-      } catch {
-        // keep polling
+      } catch (e) {
+        pollErrorCount.current += 1
+        if (pollErrorCount.current >= MAX_POLL_ERRORS) {
+          clearInterval(poll)
+          setScanError(e instanceof Error ? e.message : 'Lost connection to engine — check that the TraceCtrl engine is running')
+          setState('path_entry')
+        }
       }
     }, 2000)
     return () => clearInterval(poll)
