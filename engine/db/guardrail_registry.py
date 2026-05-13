@@ -10,7 +10,7 @@ re-emitting the same registration just refreshes the row.
 import json
 import logging
 from datetime import datetime
-from engine.db.client import execute
+from engine.db.client import as_utc, execute
 
 logger = logging.getLogger(__name__)
 
@@ -302,8 +302,10 @@ def _row_to_registration(row: tuple, recent_24h: int = 0) -> dict:
         "judge_prompt": row[7],
         "health": row[8],
         "health_reason": row[9],
-        "registered_at": row[10],
-        "last_seen_at": row[11],
+        # Stamp UTC tz on naive datetimes so the UI's new Date(iso)
+        # interprets them as UTC and toLocaleString shows local time.
+        "registered_at": as_utc(row[10]),
+        "last_seen_at": as_utc(row[11]),
         "provider": row[12] if len(row) > 12 else "judge_llm",
         "recent_activity_24h": recent_24h,
     }

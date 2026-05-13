@@ -9,7 +9,7 @@ handled by ClickHouse via ORDER BY (observed_at, violation_id), where
 import json
 import logging
 from datetime import datetime
-from engine.db.client import execute
+from engine.db.client import as_utc, execute
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +173,12 @@ def _row_to_violation(row: tuple) -> dict:
     of the violations API — the SSE watermark index was a literal `row[12]`
     that would have swallowed a re-introduced `provider` column drift.
     """
-    return dict(zip(_SELECT_COL_NAMES, row))
+    out = dict(zip(_SELECT_COL_NAMES, row))
+    # ClickHouse-driver returns naive datetimes for DateTime64(..., 'UTC').
+    # Pydantic + JS would then misinterpret the timestamp as local time;
+    # stamping tz here is what makes the UI show local time correctly.
+    out["observed_at"] = as_utc(out.get("observed_at"))
+    return out
 
 
 def get_violations(
@@ -236,7 +241,7 @@ def get_violations_since(since: datetime, limit: int = 100) -> list[dict]:
         # `inserted_at` is selected past `_SELECT_COLS` — pull it by
         # offset off the SAME source-of-truth length so adding columns
         # to `_SELECT_COL_NAMES` doesn't silently misread this field.
-        v["_inserted_at"] = r[len(_SELECT_COL_NAMES)]
+        v["_inserted_at"] = as_utc(r[len(_SELECT_COL_NAMES)])
         out.append(v)
     return out
 
@@ -246,10 +251,16 @@ def get_latest_inserted_at() -> datetime:
 
     Used as the starting watermark for an SSE subscriber so they don't get
     re-sent rows they already received via the initial `init` event.
+
+    Returns tz-aware UTC. The SSE loop compares this against `_inserted_at`
+    values from `get_violations_since` — those are now tz-aware too, and
+    mixing naive + aware datetimes raises TypeError, so this must match.
     """
+    from datetime import timezone
+
     rows = execute(
         "SELECT max(inserted_at) FROM guardrail_violations FINAL"
     )
     if rows and rows[0][0]:
-        return rows[0][0]
-    return datetime(1970, 1, 1)
+        return as_utc(rows[0][0])
+    return datetime(1970, 1, 1, tzinfo=timezone.utc)

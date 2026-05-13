@@ -13,6 +13,26 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+def test_as_utc_stamps_naive_datetime():
+    """Regression: ClickHouse-driver returns naive datetimes for `DateTime64(_, 'UTC')`
+    columns. Pydantic + JS then misinterpret them as local time, making the UI
+    render UTC clock values verbatim. `as_utc` must stamp tz on naive inputs and
+    leave aware ones alone."""
+    from datetime import datetime, timezone
+    from engine.db.timeutil import as_utc
+
+    naive = datetime(2026, 5, 13, 3, 24, 50)
+    stamped = as_utc(naive)
+    assert stamped.tzinfo is timezone.utc
+    # isoformat now produces a +00:00 suffix that JS Date() parses correctly.
+    assert stamped.isoformat().endswith("+00:00")
+
+    aware = datetime(2026, 5, 13, 3, 24, 50, tzinfo=timezone.utc)
+    assert as_utc(aware) is aware  # no-op for already-aware
+
+    assert as_utc(None) is None  # no-op for missing
+
+
 def test_public_api_exports():
     import tracectrl
 

@@ -5,6 +5,12 @@ import logging
 import threading
 from clickhouse_driver import Client
 
+# Re-export as_utc for convenience — callers that already import from this
+# module shouldn't have to know it lives in timeutil. The helper itself
+# is kept in timeutil.py so tests can import it without pulling
+# clickhouse-driver.
+from engine.db.timeutil import as_utc  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 _local = threading.local()

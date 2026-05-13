@@ -19,7 +19,7 @@ a materialized view later.
 import json
 import logging
 from datetime import datetime
-from engine.db.client import execute
+from engine.db.client import as_utc, execute
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def _row_to_invocation(ts: datetime, trace_id: str, span_id: str, attrs: dict) -
     return {
         "trace_id": trace_id,
         "span_id": span_id,
-        "observed_at": ts,
+        "observed_at": as_utc(ts),
         "decision": (a.get("tracectrl.guardrail.decision") or "").lower() or "pass",
         "timing": a.get("tracectrl.guardrail.timing") or "",
         "reason": a.get("tracectrl.guardrail.reason") or "",
