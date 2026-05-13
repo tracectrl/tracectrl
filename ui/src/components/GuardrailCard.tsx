@@ -21,10 +21,16 @@ function truncate(s: string, max = 100): string {
   return s.slice(0, max - 1).trimEnd() + '…'
 }
 
+function providerLabel(p: string | undefined): string {
+  if (p === 'protector_plus') return 'Protector Plus'
+  return 'Judge LLM'
+}
+
 export default function GuardrailCard({ guardrail: g, onClick }: Props) {
   const severityClass = `guardrail-card-${g.severity}`
   const activityWarn = g.recent_activity_24h > 0
   const interactive = !!onClick
+  const provider = g.provider || 'judge_llm'
 
   return (
     <div
@@ -44,6 +50,9 @@ export default function GuardrailCard({ guardrail: g, onClick }: Props) {
         <div className="guardrail-card-name" title={g.guardrail_name}>
           {g.guardrail_name}
         </div>
+        <span className={`guardrail-provider-chip guardrail-provider-${provider}`} title={`Provider: ${providerLabel(provider)}`}>
+          {providerLabel(provider)}
+        </span>
         <span className={`guardrail-sev sev-${g.severity}`}>
           {g.severity.toUpperCase()}
         </span>

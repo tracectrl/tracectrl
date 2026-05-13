@@ -20,6 +20,7 @@ const ScanReport     = lazy(() => import('./pages/ScanReport'))
 const SetupPage      = lazy(() => import('./pages/SetupPage'))
 const Alerts         = lazy(() => import('./pages/Alerts'))
 const Guardrails     = lazy(() => import('./pages/Guardrails'))
+const Settings       = lazy(() => import('./pages/Settings'))
 
 function Sidebar() {
   const location = useLocation()
@@ -37,6 +38,7 @@ function Sidebar() {
     { href: '/scan', label: 'Scan Report' },
     { href: '/risk', label: 'Risk Dashboard' },
     { href: '/attacks', label: 'Attack Paths' },
+    { href: '/settings', label: 'Settings' },
   ] as const
 
   return (
@@ -82,7 +84,7 @@ function Sidebar() {
       ))}
 
       <div className="sidebar-section-label">Security</div>
-      {navItems.slice(3).map(item => {
+      {navItems.slice(3, 8).map(item => {
         const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
         const showBadge = 'showUnread' in item && item.showUnread && unreadCount > 0
         return (
@@ -99,6 +101,20 @@ function Sidebar() {
                 title={`${unreadCount} unread`}
               />
             )}
+          </Link>
+        )
+      })}
+
+      <div className="sidebar-section-label">Configure</div>
+      {navItems.slice(8).map(item => {
+        const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
+        return (
+          <Link
+            key={item.href}
+            to={item.href}
+            className={`nav-link${isActive ? ' active' : ''}`}
+          >
+            <span className="nav-link-label">{item.label}</span>
           </Link>
         )
       })}
@@ -138,6 +154,7 @@ function App() {
                 <Route path="/attacks" element={<AttackPaths />} />
                 <Route path="/setup" element={<SetupPage />} />
                 <Route path="/scan" element={<ScanReport />} />
+                <Route path="/settings" element={<Settings />} />
               </Routes>
             </Suspense>
           </main>

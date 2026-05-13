@@ -1,32 +1,67 @@
-version: '3.9'
+# Dev override — builds engine + UI from local source, mounts code for hot
+# reload. ClickHouse and OTel Collector keep using the same upstream images
+# as production (no point rebuilding them).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#   # or just:
+#   make dev
+#
+# What this overrides from docker-compose.yml:
+#   - tracectrl-engine: ghcr.io/... image replaced by a locally-built dev image
+#     with uvicorn --reload and source mounted at /app
+#   - tracectrl-ui:     ghcr.io/... image replaced by a locally-built dev image
+#     running Vite dev server with HMR
+#
+# The :dev image tags prevent Compose from looking at GHCR — if you ever see
+# a pull, something's wrong with the override merge.
 
 services:
   tracectrl-engine:
+    # Local-only tag so Compose can't fall back to pulling the GHCR image.
+    image: tracectrl-engine:dev
+    pull_policy: never
     build:
-      context: ./engine
+      # Repo root context — engine/Dockerfile uses `COPY engine/...` paths so
+      # it MUST be built from one level up. The published GHCR build uses the
+      # same setup (see .github/workflows/docker.yml).
+      context: .
+      dockerfile: engine/Dockerfile
       target: dev
     volumes:
+      # Live source for hot reload. The dev target's `uvicorn --reload`
+      # watches /app for changes; mounting ./engine on top of the COPY'd
+      # source in the image makes edits take effect without rebuilds.
       - ./engine:/app
-    ports:
-      - "8000:8000"
+      # Re-mount scanner (engine imports tracectrl_scanner for rescan)
+      # so scanner changes also hot-reload.
+      - ./scanner:/opt/scanner
     environment:
+      - PYTHONPATH=/opt/tracectrl:/opt/scanner/src
       - RELOAD=true
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=9000
-      - CLICKHOUSE_DB=tracectrl
       - PIPELINE_INTERVAL_SECONDS=60
     command: ["uvicorn", "engine.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   tracectrl-ui:
+    image: tracectrl-ui:dev
+    pull_policy: never
     build:
       context: ./ui
       dockerfile: Dockerfile
       target: dev
     volumes:
+      # Live UI source for Vite HMR. The anonymous /app/node_modules volume
+      # shadows the host node_modules dir so the container's pre-installed
+      # node_modules (from the dev image build) wins — otherwise a host
+      # bind-mount can leak in macOS-native binaries that break in Alpine.
       - ./ui:/app
       - /app/node_modules
+    # Vite's default dev port is 5173. We map to host 3001 (not 3000) because
+    # 3000 is a common collision with React dev servers, Grafana, MCP servers,
+    # etc. Dashboard URL becomes http://localhost:3001 in dev.
     ports:
-      - "3000:5173"
+      - "3001:5173"
     environment:
+      # Use localhost so the browser (not the container) can reach the engine.
       - VITE_ENGINE_URL=http://localhost:8000
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
