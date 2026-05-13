@@ -10,3 +10,9 @@ __version__ = "0.1.0"
 from tracectrl.config import configure  # noqa: F401
 from tracectrl.context import ingress  # noqa: F401
 from tracectrl.agent_tagging import tag_agent, tag_agents  # noqa: F401
+from tracectrl.protector import (  # noqa: F401
+    GuardrailVerdict,
+    check_input,
+    check_output,
+    guard,
+)
