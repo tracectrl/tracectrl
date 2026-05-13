@@ -28,16 +28,19 @@ jobs:
           PKG_NAME="${TAG%-v*}"
           echo "name=$PKG_NAME" >> "$GITHUB_OUTPUT"
 
-          # Map package name to directory
+          # Map package name to directory.
+          #
+          # Only packages with a PyPI Trusted Publisher configured are listed.
+          # Held back (not yet released, intentionally absent from this case):
+          #   tracectrl-mcp, tracectrl-instrumentation-crewai,
+          #   tracectrl-instrumentation-langchain, tracectrl-instrumentation-google-adk
+          # Re-enable order: (1) configure Trusted Publisher on pypi.org,
+          # (2) add the case here, (3) add the matrix entry in pypi-cd.yml.
           case "$PKG_NAME" in
             tracectrl)                          DIR="sdk/tracectrl" ;;
             tracectrl-scanner)                  DIR="scanner" ;;
-            tracectrl-mcp)                      DIR="sdk/tracectrl-mcp" ;;
-            tracectrl-instrumentation-crewai)   DIR="sdk/tracectrl-instrumentation-crewai" ;;
             tracectrl-instrumentation-strands)  DIR="sdk/tracectrl-instrumentation-strands" ;;
             tracectrl-instrumentation-agno)     DIR="sdk/tracectrl-instrumentation-agno" ;;
-            tracectrl-instrumentation-langchain) DIR="sdk/tracectrl-instrumentation-langchain" ;;
-            tracectrl-instrumentation-google-adk) DIR="sdk/tracectrl-instrumentation-google-adk" ;;
             *)
               echo "Unknown package: $PKG_NAME"
               exit 1
