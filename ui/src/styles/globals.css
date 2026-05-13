@@ -4675,3 +4675,331 @@ h4 {
     scroll-behavior: auto !important;
   }
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TraceCtrl Guards — Settings page + provider chip on GuardrailCard
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Provider chip — classification metadata, NOT a risk signal. Uses jade to
+   keep the Signal Red vocabulary reserved for severity/risk per the
+   DESIGN.md Risk Isolation Rule. */
+.guardrail-provider-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-right: var(--space-2);
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+.guardrail-provider-protector_plus {
+  color: var(--jade);
+  background: var(--jade-soft);
+  border-color: color-mix(in srgb, var(--jade) 35%, transparent);
+}
+.guardrail-provider-judge_llm {
+  color: var(--gray-300, #B5B5B5);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.chip-provider { background: transparent; }
+.chip-provider-protector_plus.chip-active {
+  color: var(--jade);
+  border-color: color-mix(in srgb, var(--jade) 45%, transparent);
+  background: var(--jade-soft);
+}
+.chip-provider-judge_llm.chip-active {
+  color: var(--gray-100, #E0E0E0);
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.filter-label {
+  font-size: 11px;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: var(--space-2);
+  align-self: center;
+}
+
+/* Settings page ----------------------------------------------------------- */
+
+.settings-page {
+  padding: var(--space-6) var(--space-8);
+  max-width: 880px;
+}
+
+.settings-saved-line {
+  margin: var(--space-2) 0 var(--space-6);
+  font-size: 12px;
+}
+
+.settings-field { margin-bottom: var(--space-6); }
+.settings-field:last-of-type { margin-bottom: var(--space-4); }
+.settings-field code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-key-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+.settings-key-row .setup-input { flex: 1 1 auto; }
+.settings-key-btn { flex: 0 0 auto; min-width: 64px; }
+/* Informational state, not a risk signal — use gray to keep the
+   amber/red/yellow vocabulary reserved for severity per DESIGN.md. */
+.settings-key-redacted-note {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  color: var(--gray-300, #B5B5B5);
+}
+
+/* Single-column list — these 7 guardrails are independent binary toggles,
+   not parallel choices, so a 2-col grid arbitrarily pairs them. Tight
+   vertical rhythm reads better and matches the "settings list" affordance
+   from VS Code / Linear. */
+.settings-guardrails-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.settings-guardrail-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--gray-800, #2a2a2a);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.settings-guardrail-toggle:hover {
+  border-color: var(--gray-600, #555);
+  background: rgba(255, 255, 255, 0.04);
+}
+.settings-guardrail-toggle.is-on {
+  border-color: color-mix(in srgb, var(--red) 50%, transparent);
+  background: var(--red-soft);
+}
+.settings-guardrail-check {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--gray-700, #444);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--white-pure);
+  margin-top: 2px;
+}
+.settings-guardrail-toggle.is-on .settings-guardrail-check {
+  background: var(--red);
+  border-color: var(--red);
+}
+.settings-guardrail-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-guardrail-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-100, #E0E0E0);
+}
+.settings-guardrail-desc {
+  font-size: 12px;
+  color: var(--gray-400, #999);
+  line-height: 1.4;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+}
+.settings-test-result {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--gray-800, #2a2a2a);
+}
+/* Same Risk Isolation rationale as .deci-pass — a healthy connection is
+   not a 'low risk' signal, it's a success state. Use jade. */
+.settings-test-result.is-ok {
+  color: var(--jade);
+  border-color: color-mix(in srgb, var(--jade) 35%, transparent);
+  background: var(--jade-soft);
+}
+.settings-test-result.is-err {
+  color: var(--risk-critical, #FF4D4D);
+  border-color: rgba(255, 77, 77, 0.35);
+  background: rgba(255, 77, 77, 0.06);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Guardrail Detail Drawer — Recent Invocations panel
+   Surfaces every tracectrl.guardrail.evaluation span for the selected
+   guardrail (pass + fail + error). Single column, rows are click-to-expand
+   to show evidence + raw provider response.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.invocations-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.invocation-row {
+  border: 1px solid var(--gray-800, #2a2a2a);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.invocation-row-head {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  transition: background 120ms ease;
+}
+.invocation-row-head:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+/* Variant used when the row has no expandable detail — renders as a div,
+   not a button, so screen readers don't announce a misleading 'disabled'
+   state. Same visual layout, no hover affordance, no cursor change. */
+.invocation-row-head--static {
+  cursor: default;
+}
+.invocation-row-head--static:hover {
+  background: transparent;
+}
+
+/* Decision pill — risk-isolated palette:
+   pass → green (risk-low),
+   fail → red/orange severity color (matches the alert-severity scale),
+   error → neutral gray (transport issue, not a security signal). */
+.invocation-decision {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+/* Risk Isolation: 'pass' is a security-confirmation state, not a risk
+   severity. Per DESIGN.md, --risk-low (green) is reserved for the Low
+   severity tier. Use jade for the success/healthy idiom instead. */
+.invocation-decision.deci-pass {
+  color: var(--jade);
+  background: var(--jade-soft);
+  border-color: color-mix(in srgb, var(--jade) 35%, transparent);
+}
+.invocation-decision.deci-fail {
+  color: var(--risk-critical, #FF4D4D);
+  background: rgba(255, 77, 77, 0.10);
+  border-color: rgba(255, 77, 77, 0.35);
+}
+.invocation-decision.deci-error {
+  color: var(--gray-300, #B5B5B5);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.invocation-phase {
+  font-size: 11px;
+  color: var(--gray-400, #999);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.invocation-reason {
+  font-size: 13px;
+  color: var(--gray-100, #E0E0E0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.invocation-time {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.invocation-row-body {
+  border-top: 1px solid var(--gray-800, #2a2a2a);
+  padding: var(--space-3) var(--space-4);
+  background: var(--dark-surface);
+}
+
+.invocation-section {
+  margin-bottom: var(--space-3);
+}
+.invocation-section:last-child { margin-bottom: 0; }
+
+.invocation-section-head {
+  margin-bottom: var(--space-2);
+}
+.invocation-section-label {
+  font-size: 11px;
+  color: var(--gray-400, #999);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.invocation-pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gray-200, #C8C8C8);
+  background: var(--dark-surface);
+  border: 1px solid var(--gray-800, #2a2a2a);
+  border-radius: 4px;
+  padding: var(--space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+}
+

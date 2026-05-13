@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import { fetchGuardrails, GuardrailRegistration, GuardrailSeverity } from '../api/guardrails'
+import { fetchGuardrails, GuardrailProvider, GuardrailRegistration, GuardrailSeverity } from '../api/guardrails'
 import GuardrailCard from '../components/GuardrailCard'
 import GuardrailDetailDrawer from '../components/GuardrailDetailDrawer'
 import EmptyState from '../components/shared/EmptyState'
 import ErrorBanner from '../components/shared/ErrorBanner'
 
 const SEVERITIES: GuardrailSeverity[] = ['critical', 'high', 'medium', 'low']
+const PROVIDERS: { key: GuardrailProvider; label: string }[] = [
+  { key: 'protector_plus', label: 'Protector Plus' },
+  { key: 'judge_llm', label: 'Judge LLM' },
+]
 const POLL_INTERVAL_MS = 30_000
 
 export default function Guardrails() {
@@ -13,6 +17,7 @@ export default function Guardrails() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeSeverities, setActiveSeverities] = useState<Set<GuardrailSeverity>>(new Set())
+  const [activeProviders, setActiveProviders] = useState<Set<GuardrailProvider>>(new Set())
   const [selected, setSelected] = useState<GuardrailRegistration | null>(null)
 
   useEffect(() => { document.title = 'Guardrails — TraceCtrl' }, [])
@@ -49,10 +54,25 @@ export default function Guardrails() {
     })
   }
 
+  const toggleProvider = (p: GuardrailProvider) => {
+    setActiveProviders(prev => {
+      const next = new Set(prev)
+      if (next.has(p)) next.delete(p)
+      else next.add(p)
+      return next
+    })
+  }
+
   const filtered = useMemo(() => {
-    if (activeSeverities.size === 0) return guardrails
-    return guardrails.filter(g => activeSeverities.has(g.severity))
-  }, [guardrails, activeSeverities])
+    let out = guardrails
+    if (activeSeverities.size > 0) {
+      out = out.filter(g => activeSeverities.has(g.severity))
+    }
+    if (activeProviders.size > 0) {
+      out = out.filter(g => activeProviders.has((g.provider || 'judge_llm') as GuardrailProvider))
+    }
+    return out
+  }, [guardrails, activeSeverities, activeProviders])
 
   const grouped = useMemo(() => {
     const buckets = new Map<string, GuardrailRegistration[]>()
@@ -102,6 +122,27 @@ export default function Guardrails() {
         ))}
       </div>
 
+      <div className="guardrails-filters" role="toolbar" aria-label="Filter by provider">
+        <span className="filter-label">Provider:</span>
+        <button
+          type="button"
+          className={`chip${activeProviders.size === 0 ? ' chip-active' : ' chip-clear'}`}
+          onClick={() => setActiveProviders(new Set())}
+        >
+          {activeProviders.size === 0 ? 'All' : 'Clear'}
+        </button>
+        {PROVIDERS.map(p => (
+          <button
+            key={p.key}
+            type="button"
+            className={`chip chip-provider chip-provider-${p.key}${activeProviders.has(p.key) ? ' chip-active' : ''}`}
+            onClick={() => toggleProvider(p.key)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="guardrails-list">
           {[...Array(3)].map((_, i) => (
@@ -114,7 +155,7 @@ export default function Guardrails() {
           hint={
             totalCount === 0
               ? 'Pre-register guardrails via the SDK so they show up here before they ever fire. See the docs for setup.'
-              : 'Try clearing severity filters.'
+              : 'Try clearing severity or provider filters.'
           }
         />
       ) : (

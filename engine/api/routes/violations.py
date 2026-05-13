@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
@@ -48,6 +48,7 @@ def _violation_to_jsonable(v: dict) -> dict:
     )}
     obs = v.get("observed_at")
     out["observed_at"] = obs.isoformat() if isinstance(obs, datetime) else str(obs)
+    out["provider"] = v.get("provider", "judge_llm")
     return out
 
 
@@ -77,7 +78,9 @@ async def stream_violations(request: Request):
             last_seen = get_latest_inserted_at()
         except Exception:
             logger.exception("violations/stream: failed to read watermark")
-            last_seen = datetime(1970, 1, 1)
+            # tz-aware to match the comparison against tz-aware
+            # `_inserted_at` values from get_violations_since
+            last_seen = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
         try:
             initial = get_violations(limit=20)

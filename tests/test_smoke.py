@@ -2,8 +2,12 @@
 
 
 def test_tracectrl_importable():
+    import re
     import tracectrl
-    assert tracectrl.__version__ == "0.1.0"
+    # Don't pin the literal — that broke on the 0.1.0 → 0.2.0 bump.
+    # Just assert the attribute exists and looks like SemVer.
+    assert isinstance(tracectrl.__version__, str)
+    assert re.match(r"^\d+\.\d+\.\d+", tracectrl.__version__), tracectrl.__version__
 
 
 def test_schema_constants():

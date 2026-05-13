@@ -30,9 +30,10 @@ TraceCtrl gives security teams and developers complete visibility into every age
 ## Features
 
 - **TAGAAI Attack Graph Engine** — Automated vulnerability detection with built-in rules for prompt injection, excessive agency, and data leakage. CVSS-based risk scoring combining base severity, exploitability, and blast radius.
+- **TraceCtrl Guards** — Built-in LLM-judge guardrails plus optional integration with Cloudsine GenAI Protector Plus (prompt injection, PII, content moderation, vector similarity, system-prompt leakage). Configured from the dashboard, instrumented from the SDK via `tracectrl.guard()`.
 - **MCP Proxy Server** — Transparent proxy for IDE agent tracing (Cursor, Claude Code). Captures every tool call made through MCP-compatible agents without code changes.
 - **Security-Enriched Spans** — OpenTelemetry spans with `input.source` classification, memory write provenance, prompt drift detection, and tool risk categorization.
-- **Dashboard** — Topology (developer + attacker view), Sessions (trace explorer), Agents (inventory), Risk Dashboard, and Attack Paths (ranked vulnerability chains).
+- **Dashboard** — Topology (developer + attacker view), Sessions (trace explorer), Agents (inventory), Guardrails (registry + invocations), Risk Dashboard, and Attack Paths (ranked vulnerability chains).
 - **Framework Support** — Agno and AWS Strands (stable), LangChain, CrewAI, Google ADK, and OpenClaw (beta) — each requiring only 3 lines of code.
 
 ---

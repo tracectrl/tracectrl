@@ -9,7 +9,7 @@ handled by ClickHouse via ORDER BY (observed_at, violation_id), where
 import json
 import logging
 from datetime import datetime
-from engine.db.client import execute
+from engine.db.client import as_utc, execute
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +52,14 @@ def update_violations(spans: list[dict]) -> None:
 
     # The TraceCtrl SDK packs custom tracectrl.* attributes inside a `metadata`
     # JSON blob. The decision attribute will live there, NOT as a flat
-    # SpanAttribute, so we OR both forms in the filter to be safe.
+    # SpanAttribute, so we OR both forms in the filter to be safe. We accept
+    # both 'fail' (a guardrail flagged) and 'error' (transport/judge failed)
+    # because the health-override pass below relies on error rows being
+    # ingested into guardrail_violations to flip a guardrail's health to
+    # 'error' in the registry.
     decision_filter = (
-        "(SpanAttributes['tracectrl.guardrail.decision'] = 'fail' "
-        " OR JSONExtractString(SpanAttributes['metadata'], 'tracectrl.guardrail.decision') = 'fail')"
+        "(SpanAttributes['tracectrl.guardrail.decision'] IN ('fail', 'error') "
+        " OR JSONExtractString(SpanAttributes['metadata'], 'tracectrl.guardrail.decision') IN ('fail', 'error'))"
     )
     if cutoff:
         rows = execute(
@@ -115,6 +119,12 @@ def update_violations(spans: list[dict]) -> None:
             if name:
                 agent_id = name.lower().replace(" ", "-").replace("_", "-")
 
+        # Protector Plus violations carry tracectrl.guardrail.provider set
+        # by the SDK; existing judge-LLM violations don't have it. Default to
+        # judge_llm so the rows already in the table stay consistent with the
+        # ALTER ... DEFAULT 'judge_llm' applied at schema-ensure time.
+        provider = (attrs.get("tracectrl.guardrail.provider") or "judge_llm").lower()
+
         inserts.append((
             eval_span_id,                                         # violation_id
             trace_id,                                             # trace_id
@@ -129,34 +139,46 @@ def update_violations(spans: list[dict]) -> None:
             severity,                                             # severity
             ts,                                                   # observed_at
             now,                                                  # inserted_at
+            provider,                                             # provider
         ))
 
     logger.info(f"update_violations: inserting {len(inserts)} guardrail violations")
-    execute("INSERT INTO guardrail_violations VALUES", inserts)
+    # Explicit column list — the ALTER added `provider` at the end of the
+    # table, but being explicit protects against future column-order drift.
+    execute(
+        """INSERT INTO guardrail_violations
+           (violation_id, trace_id, span_id, eval_span_id, agent_id,
+            guardrail_name, judge_model, decision, reason, evidence,
+            severity, observed_at, inserted_at, provider)
+           VALUES""",
+        inserts,
+    )
+
+
+# Column list MUST stay in lock-step with `_SELECT_COL_NAMES`. The names
+# tuple is what `_row_to_violation` uses to unpack, eliminating the
+# fragile-magic-index pattern that bit us when we added `provider`.
+_SELECT_COL_NAMES = (
+    "violation_id", "trace_id", "span_id", "eval_span_id", "agent_id",
+    "guardrail_name", "judge_model", "decision", "reason", "evidence",
+    "severity", "observed_at", "provider",
+)
+_SELECT_COLS = ", ".join(_SELECT_COL_NAMES)
 
 
 def _row_to_violation(row: tuple) -> dict:
-    return {
-        "violation_id": row[0],
-        "trace_id": row[1],
-        "span_id": row[2],
-        "eval_span_id": row[3],
-        "agent_id": row[4],
-        "guardrail_name": row[5],
-        "judge_model": row[6],
-        "decision": row[7],
-        "reason": row[8],
-        "evidence": row[9],
-        "severity": row[10],
-        "observed_at": row[11],
-    }
+    """Unpack a `_SELECT_COLS` row into a dict by NAME, not by index.
 
-
-_SELECT_COLS = (
-    "violation_id, trace_id, span_id, eval_span_id, agent_id, "
-    "guardrail_name, judge_model, decision, reason, evidence, severity, "
-    "observed_at"
-)
+    Without this, adding/reordering columns silently corrupts every consumer
+    of the violations API — the SSE watermark index was a literal `row[12]`
+    that would have swallowed a re-introduced `provider` column drift.
+    """
+    out = dict(zip(_SELECT_COL_NAMES, row))
+    # ClickHouse-driver returns naive datetimes for DateTime64(..., 'UTC').
+    # Pydantic + JS would then misinterpret the timestamp as local time;
+    # stamping tz here is what makes the UI show local time correctly.
+    out["observed_at"] = as_utc(out.get("observed_at"))
+    return out
 
 
 def get_violations(
@@ -215,8 +237,11 @@ def get_violations_since(since: datetime, limit: int = 100) -> list[dict]:
     )
     out = []
     for r in rows:
-        v = _row_to_violation(r)
-        v["_inserted_at"] = r[12]
+        v = _row_to_violation(r[: len(_SELECT_COL_NAMES)])
+        # `inserted_at` is selected past `_SELECT_COLS` — pull it by
+        # offset off the SAME source-of-truth length so adding columns
+        # to `_SELECT_COL_NAMES` doesn't silently misread this field.
+        v["_inserted_at"] = as_utc(r[len(_SELECT_COL_NAMES)])
         out.append(v)
     return out
 
@@ -226,10 +251,16 @@ def get_latest_inserted_at() -> datetime:
 
     Used as the starting watermark for an SSE subscriber so they don't get
     re-sent rows they already received via the initial `init` event.
+
+    Returns tz-aware UTC. The SSE loop compares this against `_inserted_at`
+    values from `get_violations_since` — those are now tz-aware too, and
+    mixing naive + aware datetimes raises TypeError, so this must match.
     """
+    from datetime import timezone
+
     rows = execute(
         "SELECT max(inserted_at) FROM guardrail_violations FINAL"
     )
     if rows and rows[0][0]:
-        return rows[0][0]
-    return datetime(1970, 1, 1)
+        return as_utc(rows[0][0])
+    return datetime(1970, 1, 1, tzinfo=timezone.utc)
