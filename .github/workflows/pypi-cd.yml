@@ -15,6 +15,15 @@ jobs:
       id-token: write
       contents: read
 
+    # Matrix is limited to packages that have a PyPI Trusted Publisher
+    # configured AND have been intentionally released. Adding a new package
+    # requires (a) setting up the Trusted Publisher on pypi.org, and (b)
+    # adding the matrix entry here. Until both are done the publish step
+    # fails noisily on every push to main, so we keep the matrix tight.
+    #
+    # Held back (not in matrix yet, see also the case in publish.yml):
+    #   tracectrl-mcp, tracectrl-instrumentation-crewai,
+    #   tracectrl-instrumentation-langchain, tracectrl-instrumentation-google-adk
     strategy:
       fail-fast: false
       matrix:
@@ -23,18 +32,10 @@ jobs:
             dir: sdk/tracectrl
           - name: tracectrl-scanner
             dir: scanner
-          - name: tracectrl-mcp
-            dir: sdk/tracectrl-mcp
           - name: tracectrl-instrumentation-strands
             dir: sdk/tracectrl-instrumentation-strands
           - name: tracectrl-instrumentation-agno
             dir: sdk/tracectrl-instrumentation-agno
-          - name: tracectrl-instrumentation-crewai
-            dir: sdk/tracectrl-instrumentation-crewai
-          - name: tracectrl-instrumentation-langchain
-            dir: sdk/tracectrl-instrumentation-langchain
-          - name: tracectrl-instrumentation-google-adk
-            dir: sdk/tracectrl-instrumentation-google-adk
 
     steps:
       - uses: actions/checkout@v4
