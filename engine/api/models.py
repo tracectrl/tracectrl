@@ -107,6 +107,27 @@ class Violation(BaseModel):
     evidence: str
     severity: str   # one of critical/high/medium/low
     observed_at: datetime
+    provider: str = "judge_llm"  # judge_llm | protector_plus
+
+
+class GuardrailInvocation(BaseModel):
+    """One `tracectrl.guardrail.evaluation` span — pass, fail, or error.
+
+    Surfaces in the Guardrail detail drawer's Recent Invocations panel.
+    `response_json` is populated only for Protector Plus spans (legacy
+    judge_llm spans don't carry a structured response payload).
+    """
+    trace_id: str
+    span_id: str
+    observed_at: datetime
+    decision: str       # pass | fail | error
+    timing: str         # pre_input | post_output
+    reason: str
+    evidence: str
+    severity: str
+    provider: str       # judge_llm | protector_plus
+    judge_model: str
+    response_json: str = ""
 
 
 class GuardrailRegistration(BaseModel):
@@ -123,3 +144,27 @@ class GuardrailRegistration(BaseModel):
     registered_at: datetime
     last_seen_at: datetime
     recent_activity_24h: int = 0
+    provider: str = "judge_llm"  # judge_llm | protector_plus
+
+
+class ProtectorConfig(BaseModel):
+    """Public Protector Plus config — api_key is redacted in GET responses."""
+    endpoint_url: str
+    api_key: str  # redacted ('hOjm***vY2') in GET, full key in PUT body
+    enabled_guardrails: list[str]
+    updated_at: datetime | None = None
+
+
+class ProtectorConfigUpsert(BaseModel):
+    """Body for PUT /guardrails/protector-config — full api_key required."""
+    endpoint_url: str
+    api_key: str
+    enabled_guardrails: list[str]
+
+
+class ProtectorTestResult(BaseModel):
+    """Response from POST /guardrails/protector-test."""
+    ok: bool
+    ms: int
+    status_code: int | None = None
+    error: str | None = None

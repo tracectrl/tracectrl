@@ -48,6 +48,7 @@ def _violation_to_jsonable(v: dict) -> dict:
     )}
     obs = v.get("observed_at")
     out["observed_at"] = obs.isoformat() if isinstance(obs, datetime) else str(obs)
+    out["provider"] = v.get("provider", "judge_llm")
     return out
 
 

@@ -120,6 +120,24 @@ ORDER BY (scan_id)""",
         # Add column for existing deployments — IF NOT EXISTS keeps this idempotent
         # for fresh installs (the CREATE above already includes it).
         "ALTER TABLE tracectrl.guardrail_registry ADD COLUMN IF NOT EXISTS judge_prompt String AFTER description",
+        # --- TraceCtrl Guards (Protector Plus integration) ---
+        # Global config (single row, id='global'). API-based external guardrail
+        # provider config — endpoint, API key, which of the 7 guardrails are
+        # enabled. SDK fetches this at startup; UI Settings page writes it.
+        f"""CREATE TABLE IF NOT EXISTS {db}.protector_plus_config (
+            id                 String DEFAULT 'global',
+            endpoint_url       String,
+            api_key            String,
+            enabled_guardrails Array(String),
+            updated_at         DateTime64(3, 'UTC')
+        ) ENGINE = ReplacingMergeTree(updated_at)
+        ORDER BY (id)""",
+        # Provider discriminator on violations — distinguishes Protector Plus
+        # violations from the existing judge-LLM ones. Default keeps existing
+        # rows correct (they're all judge-LLM today).
+        "ALTER TABLE tracectrl.guardrail_violations ADD COLUMN IF NOT EXISTS provider String DEFAULT 'judge_llm'",
+        # Same provider discriminator on registry so the UI can chip them.
+        "ALTER TABLE tracectrl.guardrail_registry ADD COLUMN IF NOT EXISTS provider String DEFAULT 'judge_llm'",
     ]
     client = get_client()
     for stmt in stmts:

@@ -135,6 +135,13 @@ def update_guardrail_registry(spans: list[dict]) -> None:
                 attrs.get("tracectrl.guardrail.registered_at", "")
             ) or ts
 
+            # Protector Plus integration: SDK emits a `tracectrl.guardrail.provider`
+            # attribute on registration spans. Default to 'judge_llm' to keep
+            # rows from older SDK versions correct (matches the ALTER default).
+            provider = (
+                attrs.get("tracectrl.guardrail.provider") or "judge_llm"
+            ).lower()
+
             row = (
                 agent_id,
                 guardrail_name,
@@ -149,6 +156,7 @@ def update_guardrail_registry(spans: list[dict]) -> None:
                 registered_at,
                 ts,             # last_seen_at = span Timestamp
                 now,            # inserted_at
+                provider,       # provider
             )
             key = (agent_id, guardrail_name)
             existing = latest.get(key)
@@ -161,7 +169,17 @@ def update_guardrail_registry(spans: list[dict]) -> None:
                 "update_guardrail_registry: inserting %d registry rows",
                 len(inserts),
             )
-            execute("INSERT INTO guardrail_registry VALUES", inserts)
+            # Explicit columns — the ALTER added `provider` at the end and an
+            # implicit INSERT VALUES would silently misalign if the column
+            # order ever changes again.
+            execute(
+                """INSERT INTO guardrail_registry
+                   (agent_id, guardrail_name, severity, mode, timing,
+                    judge_model, description, judge_prompt, health, health_reason,
+                    registered_at, last_seen_at, inserted_at, provider)
+                   VALUES""",
+                inserts,
+            )
 
     # Health override pass: any (agent_id, guardrail_name) with decision=error
     # in the last hour gets health='error' with the most recent error reason.
@@ -216,7 +234,7 @@ def _apply_error_health_overrides() -> None:
         SELECT
             agent_id, guardrail_name, severity, mode, timing,
             judge_model, description, judge_prompt, health, health_reason,
-            registered_at, last_seen_at
+            registered_at, last_seen_at, provider
         FROM guardrail_registry FINAL
         WHERE (agent_id, guardrail_name) IN ({keys_clause})
         """,
@@ -229,7 +247,7 @@ def _apply_error_health_overrides() -> None:
     inserts = []
     for (agent_id, guardrail_name, severity, mode, timing,
          judge_model, description, judge_prompt, _health, _health_reason,
-         registered_at, last_seen_at) in existing:
+         registered_at, last_seen_at, provider) in existing:
         reason = error_lookup.get((agent_id, guardrail_name))
         if reason is None:
             continue
@@ -247,6 +265,7 @@ def _apply_error_health_overrides() -> None:
             registered_at,
             last_seen_at,
             now,
+            provider,
         ))
 
     if inserts:
@@ -254,13 +273,20 @@ def _apply_error_health_overrides() -> None:
             "update_guardrail_registry: applying error-health override to %d rows",
             len(inserts),
         )
-        execute("INSERT INTO guardrail_registry VALUES", inserts)
+        execute(
+            """INSERT INTO guardrail_registry
+               (agent_id, guardrail_name, severity, mode, timing,
+                judge_model, description, judge_prompt, health, health_reason,
+                registered_at, last_seen_at, inserted_at, provider)
+               VALUES""",
+            inserts,
+        )
 
 
 _SELECT_COLS = (
     "agent_id, guardrail_name, severity, mode, timing, "
     "judge_model, description, judge_prompt, health, health_reason, "
-    "registered_at, last_seen_at"
+    "registered_at, last_seen_at, provider"
 )
 
 
@@ -278,6 +304,7 @@ def _row_to_registration(row: tuple, recent_24h: int = 0) -> dict:
         "health_reason": row[9],
         "registered_at": row[10],
         "last_seen_at": row[11],
+        "provider": row[12] if len(row) > 12 else "judge_llm",
         "recent_activity_24h": recent_24h,
     }
 
