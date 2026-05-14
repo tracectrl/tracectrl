@@ -37,7 +37,7 @@ StrandsInstrumentor().instrument()
 
 Two guardrail providers, designed to coexist on the same agent:
 
-**1. Built-in LLM judge** — declarative guardrails evaluated by a Bedrock model:
+**1. Built-in LLM judge** — declarative guardrails evaluated by a Bedrock OR Gemini model (auto-detected from the `judge_llm` you pass in):
 
 ```python
 from tracectrl.guardrails import Guardrail, wrap_agent_with_guardrails
