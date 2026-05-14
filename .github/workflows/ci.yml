@@ -28,6 +28,11 @@ jobs:
           pip install -e ./sdk/tracectrl
           pip install -r engine/requirements.txt
           pip install pytest ruff
+          # Optional judge backend — required to actually run the Gemini
+          # path of the guardrail judge tests. Without this they SKIP
+          # (tests are written with pytest.importorskip) and the Gemini
+          # path goes unverified.
+          pip install google-genai
 
       - name: Lint
         run: ruff check sdk/ engine/ scanner/ tests/
