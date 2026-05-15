@@ -5,7 +5,7 @@
 from pkgutil import extend_path
 __path__ = extend_path(__path__, __name__)
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 from tracectrl.config import configure  # noqa: F401
 from tracectrl.context import ingress  # noqa: F401
