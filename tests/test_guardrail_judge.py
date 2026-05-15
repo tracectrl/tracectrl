@@ -16,6 +16,7 @@ from tracectrl.guardrails.judge import (
     JudgeResult,
     _is_gemini_model,
     _resolve_invoker,
+    _resolve_gemini_client,
     _resolve_gemini_model_id,
     _invoke_bedrock_judge,
     _invoke_gemini_judge,
@@ -86,7 +87,7 @@ def test_gemini_invoke_parses_pass_response(_genai_installed):
     mock_client.models.generate_content.return_value = mock_response
 
     fake_gm = MagicMock()
-    fake_gm.client = mock_client
+    fake_gm._tracectrl_genai_client = mock_client  # short-circuit the cache
     fake_gm.get_config.return_value = {"model_id": "gemini-2.5-flash"}
 
     result = _invoke_gemini_judge(fake_gm, "some prompt", attempt=1)
@@ -106,7 +107,7 @@ def test_gemini_invoke_parses_fail_response_with_evidence(_genai_installed):
     mock_client.models.generate_content.return_value = mock_response
 
     fake_gm = MagicMock()
-    fake_gm.client = mock_client
+    fake_gm._tracectrl_genai_client = mock_client  # short-circuit the cache
     fake_gm.get_config.return_value = {"model_id": "gemini-2.5-flash"}
 
     result = _invoke_gemini_judge(fake_gm, "check this", attempt=1)
@@ -125,7 +126,7 @@ def test_gemini_invoke_raises_on_missing_required_keys(_genai_installed):
     mock_client.models.generate_content.return_value = mock_response
 
     fake_gm = MagicMock()
-    fake_gm.client = mock_client
+    fake_gm._tracectrl_genai_client = mock_client  # short-circuit the cache
     fake_gm.get_config.return_value = {"model_id": "gemini-2.5-flash"}
 
     with pytest.raises(ValueError, match="missing required keys"):
@@ -139,7 +140,7 @@ def test_gemini_invoke_raises_on_empty_body(_genai_installed):
     mock_client.models.generate_content.return_value = mock_response
 
     fake_gm = MagicMock()
-    fake_gm.client = mock_client
+    fake_gm._tracectrl_genai_client = mock_client  # short-circuit the cache
     fake_gm.get_config.return_value = {"model_id": "gemini-2.5-flash"}
 
     with pytest.raises(ValueError, match="empty body"):
@@ -162,7 +163,7 @@ def test_gemini_invoke_sharpens_system_instruction_on_retry(_genai_installed):
     mock_client.models.generate_content.side_effect = capture
 
     fake_gm = MagicMock()
-    fake_gm.client = mock_client
+    fake_gm._tracectrl_genai_client = mock_client  # short-circuit the cache
     fake_gm.get_config.return_value = {"model_id": "gemini-2.5-flash"}
 
     _invoke_gemini_judge(fake_gm, "p", attempt=1)
@@ -196,6 +197,45 @@ def test_resolve_gemini_model_id_raises_if_nothing_available():
     fake = MagicMock(spec=[])
     with pytest.raises(RuntimeError, match="could not extract model_id"):
         _resolve_gemini_model_id(fake)
+
+
+# ---------------------------------------------------------------------------
+# Gemini client caching — one Client per judge_llm, not one per eval
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_gemini_client_returns_cached_attr_when_set():
+    """If the cache is populated, no Client is built. This is the hot path
+    after the first eval — every subsequent eval should hit the cache."""
+    fake = MagicMock(spec=["_tracectrl_genai_client"])
+    cached = object()
+    fake._tracectrl_genai_client = cached
+    assert _resolve_gemini_client(fake) is cached
+
+
+def test_resolve_gemini_client_prefers_strands_custom_client():
+    """Strands stores an injected client on `_custom_client`. We honour it
+    rather than constructing our own."""
+    fake = MagicMock(spec=["_tracectrl_genai_client", "_custom_client"])
+    fake._tracectrl_genai_client = None
+    injected = object()
+    fake._custom_client = injected
+    assert _resolve_gemini_client(fake) is injected
+
+
+def test_resolve_gemini_client_caches_constructed_client(_genai_installed):
+    """A fresh judge_llm with only `client_args` should construct ONE
+    client and stash it on the instance. Calling again returns the same."""
+    fake = MagicMock(spec=["_tracectrl_genai_client", "_custom_client", "client_args"])
+    fake._tracectrl_genai_client = None
+    fake._custom_client = None
+    fake.client_args = {"api_key": "dummy-key-for-test"}
+
+    first = _resolve_gemini_client(fake)
+    # Stashed on the instance.
+    assert getattr(fake, "_tracectrl_genai_client", None) is first
+    second = _resolve_gemini_client(fake)
+    assert first is second
 
 
 # ---------------------------------------------------------------------------

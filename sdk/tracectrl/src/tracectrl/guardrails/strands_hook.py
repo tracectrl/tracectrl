@@ -6,14 +6,35 @@ callbacks. So we wrap the agent's `__call__` method directly: run the agent,
 capture its response, then evaluate each guardrail in order. This keeps the
 core `Guardrail` class framework-agnostic and isolates the Strands knowledge
 to this file.
+
+Two correctness details that bit us before:
+
+  - **Post-output evals run on a background thread.** Strands' `__call__`
+    is sync-on-the-surface but internally uses `run_async` (a fresh
+    ThreadPoolExecutor + asyncio.run per call). If we evaluate the judge
+    synchronously after `super().__call__()` returns, the agent caller
+    blocks on the judge round-trip (2–8s for Gemini preview models with
+    `response_schema`). To the user it looks like the agent "stops" after
+    producing output. We fire-and-forget the eval onto a bounded executor,
+    re-attaching the captured OTel context in the worker so the span lands
+    under the same agent invocation. Pre-input stays sync — semantically
+    must run before the agent fires.
+
+  - **Snapshot the eval text BEFORE submitting.** The eval text builder
+    reads `agent.messages`, which Strands mutates on subsequent calls.
+    Without a snapshot, a fast follow-up prompt would race the bg thread
+    and the judge would see a half-mutated history.
 """
 
 from __future__ import annotations
 
+import atexit
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Iterable, List
 
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 
 from tracectrl.guardrails.guardrail import Guardrail, _model_identifier
@@ -22,6 +43,36 @@ logger = logging.getLogger(__name__)
 
 
 _REGISTRATION_SPAN_NAME = "tracectrl.guardrail.registered"
+_INVOCATION_SPAN_NAME = "tracectrl.agent.invocation"
+
+
+# Bounded executor for post-output evals. max_workers=2 keeps memory + FD
+# usage tight; the queue is unbounded but in practice a single agent caller
+# can't outpace 2 workers by much (judge calls are 1–8s each). Daemon
+# threads so a hung judge doesn't block process exit. atexit shuts it down
+# with a short grace period so short scripts still flush their spans.
+_eval_executor: ThreadPoolExecutor | None = None
+
+
+def _get_eval_executor() -> ThreadPoolExecutor:
+    global _eval_executor
+    if _eval_executor is None:
+        _eval_executor = ThreadPoolExecutor(
+            max_workers=2,
+            thread_name_prefix="tracectrl-guardrail-eval",
+        )
+        atexit.register(_shutdown_eval_executor)
+    return _eval_executor
+
+
+def _shutdown_eval_executor() -> None:
+    global _eval_executor
+    if _eval_executor is not None:
+        # wait=True so a script that runs `agent(...)` then exits still
+        # flushes the eval span. Workers are bounded, so worst case we
+        # wait one judge round-trip per pending eval.
+        _eval_executor.shutdown(wait=True)
+        _eval_executor = None
 
 
 def _emit_registration_span(agent_id: str, agent_name: str, guardrail: Guardrail) -> None:
@@ -132,32 +183,54 @@ def wrap_agent_with_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> A
         a_id = getattr(self, "_tracectrl_agent_id", None)
         a_name = getattr(self, "_tracectrl_agent_name", None)
 
-        if pre:
-            user_input = _extract_input(args, kwargs)
-            if user_input is not None:
-                for g in pre:
+        tracer = trace.get_tracer("tracectrl.guardrails")
+
+        # Outer span wraps the entire invocation. Strands' run_async copies
+        # the OTel context into its worker thread, so the invoke_agent /
+        # chat / tool spans Strands creates become children of this span.
+        # The bg-thread post-eval re-attaches this same context, so its
+        # eval span also lands here. Net result: one tidy tree per call.
+        with tracer.start_as_current_span(_INVOCATION_SPAN_NAME) as invocation_span:
+            if a_id:
+                invocation_span.set_attribute("tracectrl.agent.id", a_id)
+            if a_name:
+                invocation_span.set_attribute("tracectrl.agent.name", a_name)
+
+            if pre:
+                user_input = _extract_input(args, kwargs)
+                if user_input is not None:
+                    for g in pre:
+                        try:
+                            g.evaluate(user_input, agent_id=a_id, agent_name=a_name)
+                        except Exception:  # noqa: BLE001
+                            logger.exception("guardrail %s raised during pre_input eval", g.name)
+
+            response = super(GuardedAgent, self).__call__(*args, **kwargs)
+
+            if post:
+                # Snapshot the eval text NOW, while we still hold the lock
+                # of the current invocation — a follow-up agent call would
+                # mutate `agent.messages` and racing the bg worker against
+                # that mutation is what produces the "memory leak between
+                # agents" symptom users have reported.
+                output_text = _build_eval_text(self, response)
+                captured_ctx = otel_context.get_current()
+                for g in post:
                     try:
-                        g.evaluate(user_input, agent_id=a_id, agent_name=a_name)
-                    except Exception:  # noqa: BLE001
-                        logger.exception("guardrail %s raised during pre_input eval", g.name)
+                        _get_eval_executor().submit(
+                            _run_post_eval_bg,
+                            g,
+                            output_text,
+                            a_id,
+                            a_name,
+                            captured_ctx,
+                        )
+                    except Exception:  # noqa: BLE001 — never break the agent
+                        logger.exception(
+                            "guardrail %s failed to submit post_output eval", g.name
+                        )
 
-        response = super(GuardedAgent, self).__call__(*args, **kwargs)
-
-        if post:
-            # The agent's final response is often a terse status summary
-            # ("Payment workflow complete.") that hides the actual content
-            # we need to screen — tool inputs/outputs, OCR'd text from
-            # session context, etc. Pull the full message history off the
-            # Strands agent so the judge sees the COMPLETE picture, not just
-            # the synthesized summary.
-            output_text = _build_eval_text(self, response)
-            for g in post:
-                try:
-                    g.evaluate(output_text, agent_id=a_id, agent_name=a_name)
-                except Exception:  # noqa: BLE001 — never break the agent
-                    logger.exception("guardrail %s raised during post_output eval", g.name)
-
-        return response
+            return response
 
     GuardedAgent = type(
         f"_TraceCtrlGuarded_{cls.__name__}",
@@ -170,6 +243,29 @@ def wrap_agent_with_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> A
     agent.__class__ = GuardedAgent
 
     return agent
+
+
+def _run_post_eval_bg(
+    guardrail: Guardrail,
+    output_text: str,
+    agent_id: str | None,
+    agent_name: str | None,
+    captured_ctx: otel_context.Context,
+) -> None:
+    """Run a single post-output guardrail evaluation on a background thread.
+
+    Re-attaches the OTel context captured at submit time so the eval span
+    parents under the same agent invocation, not under whatever happened to
+    be active in this worker. Errors are logged, never raised — this thread
+    has no caller to surface them to.
+    """
+    token = otel_context.attach(captured_ctx)
+    try:
+        guardrail.evaluate(output_text, agent_id=agent_id, agent_name=agent_name)
+    except Exception:  # noqa: BLE001
+        logger.exception("guardrail %s raised during post_output eval", guardrail.name)
+    finally:
+        otel_context.detach(token)
 
 
 def register_guardrails(agent: Any, guardrails: Iterable[Guardrail]) -> None:

@@ -297,19 +297,7 @@ def _invoke_gemini_judge(judge_llm: Any, prompt: str, *, attempt: int) -> JudgeR
     attempt we sharpen the system instruction so the model recovers from
     whatever malformed-JSON cause the first attempt hit.
     """
-    client = getattr(judge_llm, "client", None)
-    if client is None:
-        # Older Strands or unusual init — try to construct one from
-        # client_args, mirroring what Strands' GeminiModel does internally.
-        client_args = getattr(judge_llm, "client_args", None) or {}
-        try:
-            from google import genai  # type: ignore
-        except ImportError as e:
-            raise RuntimeError(
-                "GeminiModel passed as judge_llm but `google-genai` is not "
-                "installed. `pip install google-genai`."
-            ) from e
-        client = genai.Client(**client_args)
+    client = _resolve_gemini_client(judge_llm)
 
     model_id = _resolve_gemini_model_id(judge_llm)
 
@@ -361,6 +349,44 @@ def _invoke_gemini_judge(judge_llm: Any, prompt: str, *, attempt: int) -> JudgeR
         reason=str(payload.get("reason", "")),
         evidence=evidence,
     )
+
+
+def _resolve_gemini_client(judge_llm: Any) -> Any:
+    """Return a cached `google.genai.Client` for this judge_llm, building it
+    once and stashing it on the judge_llm instance.
+
+    Strands' `GeminiModel` does NOT expose a `.client` attribute — it stores
+    `_custom_client` + `client_args` and builds a fresh `genai.Client` on
+    every request via `_get_client()`. Before this cache, every guardrail
+    evaluation was constructing a brand new `genai.Client` (with its own
+    httpx pool and credential setup), which under sustained load against
+    the Gemini preview models has been observed to stall judge calls and
+    starve subsequent agent invocations of FDs. One client per judge_llm
+    is enough — `genai.Client` is documented as not safe to share across
+    asyncio event loops, but we only call it from the synchronous path on
+    a dedicated thread, so a single instance is correct here.
+    """
+    cached = getattr(judge_llm, "_tracectrl_genai_client", None)
+    if cached is not None:
+        return cached
+    # If the GeminiModel was constructed with an injected client, honour it.
+    injected = getattr(judge_llm, "_custom_client", None)
+    if injected is not None:
+        return injected
+    client_args = getattr(judge_llm, "client_args", None) or {}
+    try:
+        from google import genai  # type: ignore
+    except ImportError as e:
+        raise RuntimeError(
+            "GeminiModel passed as judge_llm but `google-genai` is not "
+            "installed. `pip install google-genai`."
+        ) from e
+    client = genai.Client(**client_args)
+    try:
+        judge_llm._tracectrl_genai_client = client
+    except Exception:  # noqa: BLE001 — frozen dataclasses etc.
+        pass
+    return client
 
 
 def _resolve_gemini_model_id(judge_llm: Any) -> str:
