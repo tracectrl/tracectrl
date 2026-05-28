@@ -325,7 +325,13 @@ def _get_agent_ids_for_service(service: str) -> set[str]:
 
 
 def _get_child_agent_id(ingress_span_id: str) -> str | None:
-    """Find the first child AGENT span of an ingress span."""
+    """Find the first child AGENT span of an ingress span.
+
+    Handles both direct AGENT children and AGENT grandchildren nested under
+    tracectrl.agent.invocation wrapper spans (introduced in SDK 0.3.1 for
+    non-blocking guardrail evals).
+    """
+    # First try direct AGENT children (backward compatible with SDK < 0.3.1)
     rows = execute(
         """
         SELECT SpanAttributes['tracectrl.agent.id'], SpanAttributes['agno.agent.id']
@@ -338,6 +344,29 @@ def _get_child_agent_id(ingress_span_id: str) -> str | None:
     )
     if rows and (rows[0][0] or rows[0][1]):
         return rows[0][0] or rows[0][1]
+
+    # If no direct AGENT child, look for tracectrl.agent.invocation children
+    # and search THEIR children for AGENT spans (handles SDK >= 0.3.1 with
+    # guardrail wrapper that introduces an intermediate invocation span)
+    rows = execute(
+        """
+        WITH invocation_children AS (
+            SELECT SpanId
+            FROM otel_traces
+            WHERE ParentSpanId = %(span_id)s
+              AND SpanName = 'tracectrl.agent.invocation'
+        )
+        SELECT SpanAttributes['tracectrl.agent.id'], SpanAttributes['agno.agent.id']
+        FROM otel_traces
+        WHERE ParentSpanId IN (SELECT SpanId FROM invocation_children)
+          AND SpanAttributes['openinference.span.kind'] = 'AGENT'
+        LIMIT 1
+        """,
+        {"span_id": ingress_span_id}
+    )
+    if rows and (rows[0][0] or rows[0][1]):
+        return rows[0][0] or rows[0][1]
+
     return None
 
 
