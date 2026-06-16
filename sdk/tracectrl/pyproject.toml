@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tracectrl"
-version = "0.3.1"
+version = "0.3.2"
 description = "TraceCtrl SDK — agentic AI security observability"
 readme = "README.md"
 requires-python = ">=3.10"
