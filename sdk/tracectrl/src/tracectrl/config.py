@@ -82,7 +82,11 @@ def get_tracer_provider() -> TracerProvider:
 
         headers = {}
         if _config.api_key:
-            headers["Authorization"] = f"Bearer {_config.api_key}"
+            # Lowercase key: gRPC metadata keys MUST be lowercase (HTTP/2 spec;
+            # the grpc lib rejects "Authorization" with "Illegal header key").
+            # Lowercase is also valid for OTLP/HTTP (HTTP/1.1 headers are
+            # case-insensitive), so this works for both exporters.
+            headers["authorization"] = f"Bearer {_config.api_key}"
 
         normalized_endpoint, insecure = _normalize_endpoint(_config.endpoint)
 
